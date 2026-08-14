@@ -1,0 +1,147 @@
+===============================================================================
+ MEDIDAS DAX — Reporte de Ventas
+ Copiar y pegar una por una en Power BI Desktop:
+   Inicio > Nueva medida  (pegar el bloque completo, incluido el nombre y el "=")
+===============================================================================
+
+-------------------------------------------------------------------------------
+ 1. Total Ventas   <-- ESTA ES LA MEDIDA QUE PIDE EL ENUNCIADO
+-------------------------------------------------------------------------------
+ SUMX recorre fila por fila y multiplica antes de sumar. Es la diferencia clave
+ con SUM: escribir SUM(Cantidad) * SUM(Precio) daría un número completamente
+ distinto y sin sentido, porque multiplicaría totales en vez de sumar productos.
+
+Total Ventas =
+SUMX(
+    Ventas,
+    Ventas[Cantidad] * Ventas[Precio]
+)
+
+
+-------------------------------------------------------------------------------
+ 2. Cantidad Vendida
+-------------------------------------------------------------------------------
+ Unidades vendidas. Acá SUM sí es lo correcto: se suman unidades, no productos
+ de dos columnas.
+
+Cantidad Vendida =
+SUM(Ventas[Cantidad])
+
+
+-------------------------------------------------------------------------------
+ 3. Numero de Ventas
+-------------------------------------------------------------------------------
+ Cantidad de transacciones registradas, que es distinto de las unidades
+ vendidas. Tener las dos medidas separadas evita la ambigüedad del enunciado
+ sobre qué significa "CantidadVentas".
+
+Numero de Ventas =
+COUNTROWS(Ventas)
+
+
+-------------------------------------------------------------------------------
+ 4. Ticket Promedio
+-------------------------------------------------------------------------------
+ DIVIDE en lugar del operador "/": si el denominador es 0 devuelve el valor
+ alternativo (acá 0) en lugar de un error de división. Con filtros aplicados es
+ muy fácil terminar con un denominador vacío.
+
+Ticket Promedio =
+DIVIDE(
+    [Total Ventas],
+    [Numero de Ventas],
+    0
+)
+
+
+-------------------------------------------------------------------------------
+ 5. Precio Promedio Ponderado
+-------------------------------------------------------------------------------
+ Precio medio real, ponderado por unidades. Es distinto de AVERAGE(Precio), que
+ trataría igual a una venta de 1 unidad y a una de 100.
+
+Precio Promedio Ponderado =
+DIVIDE(
+    [Total Ventas],
+    [Cantidad Vendida],
+    0
+)
+
+
+-------------------------------------------------------------------------------
+ 6. Total Ventas Mes Anterior
+-------------------------------------------------------------------------------
+ Requiere una tabla de fechas marcada como tal (ver el paso 6 de la guía).
+
+Total Ventas Mes Anterior =
+CALCULATE(
+    [Total Ventas],
+    DATEADD(Calendario[Fecha], -1, MONTH)
+)
+
+
+-------------------------------------------------------------------------------
+ 7. Variacion vs Mes Anterior %
+-------------------------------------------------------------------------------
+ BLANK() en vez de 0 cuando no hay mes anterior: así el gráfico deja el punto
+ vacío en lugar de dibujar una caída del 100% que no ocurrió.
+
+Variacion vs Mes Anterior % =
+VAR VentasActual   = [Total Ventas]
+VAR VentasAnterior = [Total Ventas Mes Anterior]
+RETURN
+    IF(
+        OR( ISBLANK(VentasAnterior), VentasAnterior = 0 ),
+        BLANK(),
+        DIVIDE( VentasActual - VentasAnterior, VentasAnterior )
+    )
+
+
+-------------------------------------------------------------------------------
+ 8. Productos con Venta
+-------------------------------------------------------------------------------
+ Cuántos productos distintos tuvieron movimiento en el contexto filtrado.
+
+Productos con Venta =
+DISTINCTCOUNT(Ventas[Producto])
+
+
+-------------------------------------------------------------------------------
+ 9. Ventas con Anomalia
+-------------------------------------------------------------------------------
+ Cuenta las filas que el análisis de calidad de datos marcó como sospechosas
+ (cantidad <= 0, precio <= 0 o fecha nula). Sirve para dejar visible en el
+ reporte que el dato de origen tiene problemas, en vez de esconderlos.
+
+Ventas con Anomalia =
+CALCULATE(
+    COUNTROWS(Ventas),
+    Ventas[TieneAnomalia] = 1
+)
+
+
+===============================================================================
+ TABLA DE CALENDARIO
+ Necesaria sólo para las medidas 6 y 7 (comparación con el mes anterior).
+ Crear con:  Modelado > Nueva tabla
+===============================================================================
+
+Calendario =
+VAR FechaMinima = MIN(Ventas[Fecha])
+VAR FechaMaxima = MAX(Ventas[Fecha])
+RETURN
+ADDCOLUMNS(
+    CALENDAR( FechaMinima, FechaMaxima ),
+    "Anio",       YEAR([Date]),
+    "NumeroMes",  MONTH([Date]),
+    "AnioMes",    FORMAT([Date], "YYYY-MM"),
+    "NombreMes",  FORMAT([Date], "MMMM"),
+    "Trimestre",  "T" & FORMAT([Date], "Q")
+)
+
+ Después de crearla:
+   1. Renombrar la columna [Date] a [Fecha].
+   2. Seleccionar la tabla Calendario > pestaña "Herramientas de tablas"
+      > "Marcar como tabla de fechas" > elegir la columna Fecha.
+   3. En la vista Modelo, arrastrar Calendario[Fecha] sobre Ventas[Fecha]
+      para crear la relación (1 a muchos, desde Calendario hacia Ventas).

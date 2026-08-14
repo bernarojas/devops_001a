@@ -1,0 +1,125 @@
+@model PaginaDe<ResumenMensualCompania>
+@{
+    ViewData["Title"] = "Resumen por compañía";
+    var filtro = (FiltroResumen)ViewBag.Filtro;
+    var periodos = ViewBag.Periodos as IReadOnlyList<DateOnly> ?? new List<DateOnly>();
+    var companias = ViewBag.Companias as IReadOnlyList<string> ?? new List<string>();
+}
+
+<h2>Resumen mensual por compañía</h2>
+<p class="text-muted">
+    Es exactamente lo que devuelve
+    <code>GET /api/ventas/resumen-mensual</code>. Misma vista SQL, mismos números.
+</p>
+
+<form method="get" class="card card-body bg-light mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label mb-1">Compañía</label>
+            <select name="Compania" class="form-select form-select-sm">
+                <option value="">— Todas —</option>
+                @foreach (var c in companias)
+                {
+                    <option value="@c" selected="@(filtro.Compania == c)">@c</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label mb-1">Producto</label>
+            <input name="Producto" value="@filtro.Producto" class="form-control form-control-sm"
+                   placeholder="Nombre exacto" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label mb-1">Período</label>
+            <select name="Periodo" class="form-select form-select-sm">
+                <option value="">— Todos —</option>
+                @foreach (var p in periodos)
+                {
+                    <option value="@p.ToString("yyyy-MM-dd")" selected="@(filtro.Periodo == p)">
+                        @p.ToString("yyyy-MM")
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+            <a asp-action="PorCompania" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        </div>
+    </div>
+</form>
+
+<p class="text-muted">
+    <strong>@Model.TotalRegistros.ToString("N0")</strong> filas
+    @if (Model.TotalPaginas > 0)
+    {
+        <text>— página @Model.PaginaActual de @Model.TotalPaginas</text>
+    }
+</p>
+
+<div class="table-responsive">
+    <table class="table table-sm tabla-datos">
+        <thead>
+            <tr>
+                <th>Compañía</th>
+                <th>Producto</th>
+                <th>Período</th>
+                <th class="numero">Cantidad vendida</th>
+                <th class="numero">Total vendido</th>
+                <th class="numero">N.º de ventas</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Items.Count == 0)
+            {
+                <tr><td colspan="6" class="text-center text-muted py-4">
+                    No hay datos para el filtro aplicado.
+                </td></tr>
+            }
+            @foreach (var fila in Model.Items)
+            {
+                <tr>
+                    <td>@fila.Compania</td>
+                    <td>@fila.Producto</td>
+                    <td>@fila.Periodo.ToString("yyyy-MM-dd")</td>
+                    <td class="numero">@fila.CantidadVentas.ToString("N0")</td>
+                    <td class="numero">@fila.TotalVentas.ToString(Formatos.Moneda)</td>
+                    <td class="numero">@fila.NumeroTransacciones.ToString("N0")</td>
+                </tr>
+            }
+        </tbody>
+        @if (Model.Items.Count > 0)
+        {
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td colspan="3">Total de la página</td>
+                    <td class="numero">@Model.Items.Sum(f => f.CantidadVentas).ToString("N0")</td>
+                    <td class="numero">@Model.Items.Sum(f => f.TotalVentas).ToString(Formatos.Moneda)</td>
+                    <td class="numero">@Model.Items.Sum(f => f.NumeroTransacciones).ToString("N0")</td>
+                </tr>
+            </tfoot>
+        }
+    </table>
+</div>
+
+@if (Model.TotalPaginas > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm">
+            <li class="page-item @(Model.HayAnterior ? "" : "disabled")">
+                <a class="page-link" asp-action="PorCompania"
+                   asp-route-Compania="@filtro.Compania" asp-route-Producto="@filtro.Producto"
+                   asp-route-Periodo="@filtro.Periodo?.ToString("yyyy-MM-dd")"
+                   asp-route-Pagina="@(Model.PaginaActual - 1)">Anterior</a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">@Model.PaginaActual / @Model.TotalPaginas</span>
+            </li>
+            <li class="page-item @(Model.HaySiguiente ? "" : "disabled")">
+                <a class="page-link" asp-action="PorCompania"
+                   asp-route-Compania="@filtro.Compania" asp-route-Producto="@filtro.Producto"
+                   asp-route-Periodo="@filtro.Periodo?.ToString("yyyy-MM-dd")"
+                   asp-route-Pagina="@(Model.PaginaActual + 1)">Siguiente</a>
+            </li>
+        </ul>
+    </nav>
+}

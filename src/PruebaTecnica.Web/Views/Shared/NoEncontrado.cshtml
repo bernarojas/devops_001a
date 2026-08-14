@@ -1,0 +1,10 @@
+@{
+    ViewData["Title"] = "No encontrado";
+}
+
+<div class="alert alert-warning">
+    <h4 class="alert-heading">No encontrado</h4>
+    <p class="mb-0">@(ViewBag.Mensaje ?? "El registro solicitado no existe.")</p>
+</div>
+
+<a class="btn btn-secondary" href="javascript:history.back()">Volver</a>

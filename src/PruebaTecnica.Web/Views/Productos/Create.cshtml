@@ -1,0 +1,30 @@
+@model Producto
+@{
+    ViewData["Title"] = "Nuevo producto";
+}
+
+<h2>Nuevo producto</h2>
+
+<form asp-action="Create" method="post" class="mt-3" style="max-width: 600px;">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+    <div class="mb-3">
+        <label asp-for="NombreProducto" class="form-label"></label>
+        <input asp-for="NombreProducto" class="form-control" autocomplete="off" />
+        <span asp-validation-for="NombreProducto" class="text-danger small"></span>
+        <div class="form-text">El nombre debe ser único en el maestro.</div>
+    </div>
+
+    <div class="form-check mb-3">
+        <input asp-for="Activo" class="form-check-input" />
+        <label asp-for="Activo" class="form-check-label"></label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Guardar</button>
+    <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

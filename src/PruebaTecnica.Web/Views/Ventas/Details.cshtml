@@ -1,0 +1,54 @@
+@model Venta
+@{
+    ViewData["Title"] = $"Venta #{Model.Id}";
+}
+
+<h2>Venta #@Model.Id</h2>
+
+<dl class="row mt-3" style="max-width: 700px;">
+    <dt class="col-sm-4">Compañía</dt>
+    <dd class="col-sm-8">@Model.Compania</dd>
+
+    <dt class="col-sm-4">Producto</dt>
+    <dd class="col-sm-8">@Model.NombreProducto</dd>
+
+    <dt class="col-sm-4">Producto en el maestro</dt>
+    <dd class="col-sm-8">
+        @if (Model.ProductoMaestro is not null)
+        {
+            <span>@Model.ProductoMaestro.NombreProducto (Id @Model.IdProducto)</span>
+            @if (!Model.ProductoMaestro.Activo)
+            {
+                <span class="badge bg-secondary">inactivo</span>
+            }
+        }
+        else
+        {
+            <span class="badge bg-danger">sin vincular al maestro</span>
+        }
+    </dd>
+
+    <dt class="col-sm-4">Fecha</dt>
+    <dd class="col-sm-8">@Model.Fecha?.ToString("dd-MM-yyyy")</dd>
+
+    <dt class="col-sm-4">Período</dt>
+    <dd class="col-sm-8">
+        @(Model.Fecha.HasValue
+            ? new DateTime(Model.Fecha.Value.Year, Model.Fecha.Value.Month, 1).ToString("yyyy-MM-dd")
+            : "—")
+    </dd>
+
+    <dt class="col-sm-4">Cantidad</dt>
+    <dd class="col-sm-8">@Model.Cantidad?.ToString("N0")</dd>
+
+    <dt class="col-sm-4">Precio unitario</dt>
+    <dd class="col-sm-8">@Model.Precio?.ToString(Formatos.Moneda)</dd>
+
+    <dt class="col-sm-4">Total</dt>
+    <dd class="col-sm-8"><strong>@Model.Total.ToString(Formatos.Moneda)</strong></dd>
+</dl>
+
+<div class="d-flex gap-2">
+    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">Editar</a>
+    <a asp-action="Index" class="btn btn-outline-secondary">Volver</a>
+</div>

@@ -1,0 +1,174 @@
+@model DatosGraficoBarras
+@*
+    Gráfico de barras verticales, dibujado como SVG en el servidor.
+
+    El viewBox fija un lienzo de 1000x300 y el CSS lo escala al ancho
+    disponible: el gráfico es responsivo sin una sola línea de JavaScript.
+
+    NOTA SOBRE <text>
+    Razor reserva la etiqueta <text> como construcción propia para emitir texto
+    literal, y SVG también tiene un elemento <text>. Escribirlo directamente
+    falla con RZ1023 ("<text> tags cannot contain attributes"). Por eso los
+    rótulos se arman con la función local Texto() y se emiten con Html.Raw,
+    codificando el contenido para no abrir un hueco de inyección.
+*@
+@{
+    var puntos = Model.Puntos;
+
+    // Lienzo. Lo declara quien usa el gráfico, según el ancho real donde va;
+    // ver la explicación en DatosGraficoBarras.AnchoLienzo.
+    double ancho = Model.AnchoLienzo;
+    double alto  = Model.AltoLienzo;
+
+    // Márgenes: el izquierdo deja sitio a las etiquetas del eje Y, el inferior
+    // a las del eje X.
+    const double margenIzq = 68, margenDer = 14, margenSup = 16, margenInf = 44;
+
+    double anchoTrazado = ancho - margenIzq - margenDer;
+    double altoTrazado  = alto  - margenSup - margenInf;
+
+    // La escala arranca siempre en cero. Recortar el eje exagera visualmente
+    // las diferencias y es una de las formas más comunes de mentir con un
+    // gráfico sin decir una sola cifra falsa.
+    decimal maximo = puntos.Count > 0 ? puntos.Max(p => p.Valor) : 1m;
+    if (maximo <= 0) { maximo = 1m; }
+
+    double paso       = puntos.Count > 0 ? anchoTrazado / puntos.Count : anchoTrazado;
+    double anchoBarra = Math.Max(2, paso * 0.62);
+
+    const int lineas = 4;   // líneas de referencia horizontales
+    var idTitulo = (Model.IdAccesible ?? "grafico") + "-titulo";
+
+    string Texto(double x, double y, string clase, string ancla, string contenido) =>
+        $"<text x=\"{Svg.N(x)}\" y=\"{Svg.N(y)}\" class=\"{clase}\" text-anchor=\"{ancla}\">" +
+        System.Net.WebUtility.HtmlEncode(contenido) + "</text>";
+
+    // Contenido del tooltip. El servicio compone el detalle como
+    // "monto · unidades · ventas"; acá se separa en líneas para que se lea como
+    // una ficha y no como un renglón largo.
+    string Tooltip(PuntoGrafico punto)
+    {
+        var partes = (punto.Detalle ?? punto.Valor.ToString("N0"))
+                     .Split(" · ", StringSplitOptions.RemoveEmptyEntries);
+
+        var html = $"<div class='tip-titulo'>{System.Net.WebUtility.HtmlEncode(punto.Etiqueta)}</div>";
+
+        if (partes.Length > 0)
+        {
+            html += $"<div class='tip-valor'>{System.Net.WebUtility.HtmlEncode(partes[0])}</div>";
+        }
+
+        if (partes.Length > 1)
+        {
+            // Se codifica cada parte por separado y se unen con el separador
+            // literal. Codificar la cadena completa convertiría también el "·"
+            // en &#183;, y como Razor vuelve a escapar el "&" al escribir el
+            // atributo, el resultado quedaba doblemente codificado. Se veía
+            // bien de casualidad —el navegador lo decodifica dos veces— pero
+            // depender de eso es frágil.
+            html += "<div class='tip-detalle'>"
+                  + string.Join(" · ", partes.Skip(1).Select(System.Net.WebUtility.HtmlEncode))
+                  + "</div>";
+        }
+
+        return html;
+    }
+}
+
+@if (puntos.Count == 0)
+{
+    <p class="text-muted small mb-0">Sin datos para graficar.</p>
+}
+else
+{
+    @* Sin preserveAspectRatio="none": esa opción estira el dibujo de forma no
+       uniforme para llenar el alto fijado por CSS, y deforma también el texto
+       de los rótulos. Con el valor por defecto se conserva la proporción y la
+       altura la calcula el navegador a partir del viewBox. *@
+    <svg class="grafico" viewBox="0 0 @Svg.N(ancho) @Svg.N(alto)" role="img"
+         aria-labelledby="@idTitulo">
+
+        <title id="@idTitulo">
+            Gráfico de barras con @puntos.Count períodos. Máximo:
+            @Svg.Etiqueta(maximo / Model.Divisor) @Model.UnidadEjeY
+        </title>
+
+        @* --- Líneas de referencia y escala del eje Y --- *@
+        @for (int i = 0; i <= lineas; i++)
+        {
+            double y = margenSup + altoTrazado * i / lineas;
+            decimal valor = maximo * (lineas - i) / lineas;
+
+            <line x1="@Svg.N(margenIzq)" y1="@Svg.N(y)"
+                  x2="@Svg.N(ancho - margenDer)" y2="@Svg.N(y)" class="grafico-guia" />
+
+            @Html.Raw(Texto(margenIzq - 10, y + 4, "grafico-eje", "end",
+                            Svg.Etiqueta(valor / Model.Divisor)))
+        }
+
+        @* --- Barras --- *@
+        @for (int i = 0; i < puntos.Count; i++)
+        {
+            var punto = puntos[i];
+            double x  = margenIzq + paso * i + (paso - anchoBarra) / 2;
+            double y  = margenSup + altoTrazado - (double)(punto.Valor / maximo) * altoTrazado;
+            double h  = Math.Max(0, margenSup + altoTrazado - y);
+
+            @* Una barra sin altura igual se dibuja como una línea al ras del
+               eje: comunica "existe y vale cero", que no es lo mismo que
+               "no hay dato". *@
+            @* La columna se agrupa para que el resaltado siga funcionando: la
+               zona sensible va encima de la barra y taparía su :hover, pero al
+               estar ambas dentro del mismo <g> basta con reaccionar al hover
+               del grupo. *@
+            <g class="grafico-columna">
+                <rect x="@Svg.N(x)"
+                      y="@Svg.N(h < 1 ? margenSup + altoTrazado - 1 : y)"
+                      width="@Svg.N(anchoBarra)"
+                      height="@Svg.N(h < 1 ? 1 : h)"
+                      rx="2"
+                      class="@(punto.Valor <= 0 ? "grafico-barra grafico-barra-vacia" : "grafico-barra")" />
+
+                @* Zona sensible del ancho completo de la columna, transparente.
+                   Sirve para dos cosas: que no haya que acertarle a una barra de
+                   pocos píxeles, y que las barras bajas o en cero también
+                   respondan al mouse.
+
+                   fill="transparent" y no fill="none": "none" no recibe eventos. *@
+                <rect x="@Svg.N(margenIzq + paso * i)"
+                      y="@Svg.N(margenSup)"
+                      width="@Svg.N(paso)"
+                      height="@Svg.N(altoTrazado)"
+                      fill="transparent"
+                      class="grafico-zona"
+                      tabindex="0"
+                      role="button"
+                      aria-label="@punto.Etiqueta: @(punto.Detalle ?? punto.Valor.ToString("N0"))"
+                      data-bs-toggle="tooltip"
+                      data-bs-html="true"
+                      data-bs-placement="top"
+                      title="@Tooltip(punto)" />
+            </g>
+        }
+
+        @* --- Etiquetas del eje X --- *@
+        @for (int i = 0; i < puntos.Count; i++)
+        {
+            if (i % Model.CadaCuantasEtiquetas == 0)
+            {
+                @Html.Raw(Texto(margenIzq + paso * i + paso / 2, alto - margenInf + 20,
+                                "grafico-eje", "middle", puntos[i].Etiqueta))
+            }
+        }
+
+        @* --- Línea base --- *@
+        <line x1="@Svg.N(margenIzq)" y1="@Svg.N(margenSup + altoTrazado)"
+              x2="@Svg.N(ancho - margenDer)" y2="@Svg.N(margenSup + altoTrazado)"
+              class="grafico-base" />
+    </svg>
+
+    @if (!string.IsNullOrEmpty(Model.UnidadEjeY))
+    {
+        <p class="grafico-unidad">Valores en @Model.UnidadEjeY</p>
+    }
+}

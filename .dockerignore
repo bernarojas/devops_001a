@@ -1,0 +1,18 @@
+# Todo lo que no debe entrar al contexto de construcción de Docker.
+# Sin esto, `docker build` envía cientos de MB de binarios al demonio y la
+# etapa de compilación puede reutilizar objetos compilados en Windows.
+
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+
+*.bak
+*.pbix
+.git/
+.gitignore
+
+# La documentación no participa de la compilación.
+*.md
+powerbi/
+docs/

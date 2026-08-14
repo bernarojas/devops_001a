@@ -1,0 +1,174 @@
+@{
+    ViewData["Title"] = "Inicio";
+    bool baseDisponible = ViewBag.BaseDisponible ?? false;
+}
+
+<h2>Prueba técnica — Ventas</h2>
+<p class="text-muted">SQL Server · .NET 9 (MVC + Web API) · Power BI</p>
+
+@if (!baseDisponible)
+{
+    <div class="alert alert-danger">
+        <h5 class="alert-heading">No hay conexión con la base de datos</h5>
+        <p>La aplicación arrancó, pero no puede leer la base <code>Tecnica</code>. Verifique:</p>
+        <ol class="mb-0">
+            <li>Que el contenedor esté corriendo: <code>docker ps</code> debe listar <code>mssql-tecnica</code>.</li>
+            <li>Que se hayan ejecutado los scripts de la carpeta <code>sql/</code>.</li>
+            <li>Que la cadena de conexión <code>Tecnica</code> de <code>appsettings.json</code> apunte al servidor correcto.</li>
+        </ol>
+    </div>
+}
+else
+{
+    <div class="row g-3 mt-1">
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="fs-3 fw-bold">@(((int)ViewBag.TotalVentas).ToString("N0"))</div>
+                    <div class="text-muted small">Ventas registradas</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="fs-3 fw-bold">@(((int)ViewBag.TotalProductos).ToString("N0"))</div>
+                    <div class="text-muted small">Productos en el maestro</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="fs-3 fw-bold">@(((int)ViewBag.TotalPeriodos).ToString("N0"))</div>
+                    <div class="text-muted small">Períodos con datos</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="fs-3 fw-bold">@(((decimal)ViewBag.MontoTotal).ToString(Formatos.Moneda))</div>
+                    <div class="text-muted small">Total vendido (Cantidad × Precio)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if ((int)ViewBag.Anomalias > 0)
+    {
+        <div class="alert alert-warning mt-3">
+            Hay <strong>@(((int)ViewBag.Anomalias).ToString("N0"))</strong> ventas con
+            anomalías (cantidad ≤ 0, precio ≤ 0, fecha nula o producto sin vincular).
+            No se corrigieron a propósito: el enunciado pide detectarlas, y alterar
+            datos del set original sin que nadie lo pida sería una decisión que no
+            corresponde tomar acá.
+            <a asp-controller="Ventas" asp-action="Index" asp-route-SoloAnomalias="true"
+               class="alert-link">Ver el detalle</a>.
+        </div>
+    }
+}
+
+@if (baseDisponible)
+{
+    var serie = ViewBag.SerieMensual as IReadOnlyList<PuntoGrafico> ?? new List<PuntoGrafico>();
+    var top   = ViewBag.TopProductos as IReadOnlyList<PuntoGrafico> ?? new List<PuntoGrafico>();
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Evolución mensual</h5>
+                    <p class="text-muted small mb-3">
+                        Total vendido por período. El corte visible entre 2024-07 y 2025-01
+                        son los cinco meses sin ninguna venta que hay en los datos de origen.
+                    </p>
+                    @* Lienzo de 900 de ancho: es aproximadamente lo que mide
+                       esta columna en un escritorio, así que la escala queda
+                       cerca de 1 y el texto sale a su tamaño natural. *@
+                    @await Html.PartialAsync("_GraficoBarras", new DatosGraficoBarras
+                    {
+                        Puntos = serie,
+                        UnidadEjeY = "millones de $",
+                        CadaCuantasEtiquetas = 3,
+                        AnchoLienzo = 900,
+                        AltoLienzo = 260,
+                        IdAccesible = "serie-mensual"
+                    })
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Productos con mayor facturación</h5>
+                    <p class="text-muted small mb-3">
+                        Los 10 primeros de 860, por total vendido acumulado.
+                    </p>
+                    @await Html.PartialAsync("_GraficoBarrasHorizontal", new DatosGraficoBarras
+                    {
+                        Puntos = top,
+                        UnidadEjeY = "millones de $",
+                        IdAccesible = "top-productos"
+                    })
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<hr class="my-4" />
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Ventas</h5>
+                <p class="card-text text-muted small">
+                    Listar, crear, editar y eliminar ventas, con filtros por compañía,
+                    producto y rango de fechas.
+                </p>
+                <a asp-controller="Ventas" asp-action="Index" class="btn btn-sm btn-primary">Abrir</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Productos</h5>
+                <p class="card-text text-muted small">
+                    Maestro generado en el punto 1.1 a partir de la tabla Ventas.
+                    CRUD completo, con borrado lógico.
+                </p>
+                <a asp-controller="Productos" asp-action="Index" class="btn btn-sm btn-primary">Abrir</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Resumen mensual</h5>
+                <p class="card-text text-muted small">
+                    Matriz producto × período del punto 1.2, con los períodos sin
+                    ventas en 0. También abierto por compañía.
+                </p>
+                <a asp-controller="Resumen" asp-action="Index" class="btn btn-sm btn-primary">Abrir</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-body">
+        <h5 class="card-title">API para consulta externa</h5>
+        <p class="card-text text-muted small mb-2">Documentada con Swagger. Endpoints principales:</p>
+        <ul class="small">
+            <li><code>GET /api/ventas</code></li>
+            <li><code>GET /api/ventas/resumen-mensual</code></li>
+            <li><code>GET /api/ventas/resumen-mensual?compania=Northwind&amp;periodo=2025-04-01</code></li>
+            <li><code>GET /api/ventas/matriz-mensual?incluirSinVentas=true</code></li>
+        </ul>
+        <a href="/swagger" target="_blank" class="btn btn-sm btn-outline-primary">Abrir Swagger</a>
+    </div>
+</div>

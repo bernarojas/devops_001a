@@ -1,0 +1,17 @@
+# Compilación .NET
+bin/
+obj/
+*.user
+
+# Power BI: archivos temporales de sesión (el .pbix SÍ se entrega)
+*.pbix.tmp
+~$*.pbix
+
+# El backup no se versiona: pesa 6,8 MB y lo entrega quien toma la prueba.
+# La ruta se le pasa al script:  .\scripts\setup.ps1 -RutaBackup "..."
+*.bak
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store

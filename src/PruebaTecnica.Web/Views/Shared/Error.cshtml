@@ -1,0 +1,42 @@
+@model ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+    int? codigo = ViewBag.Codigo as int?;
+}
+
+<div class="alert alert-danger">
+    <h4 class="alert-heading">
+        Ocurrió un error@(codigo.HasValue ? $" ({codigo})" : "")
+    </h4>
+    <p class="mb-0">
+        @switch (codigo)
+        {
+            case 503:
+                <text>
+                    No se pudo comunicar con la base de datos. Verifique que el
+                    contenedor <code>mssql-tecnica</code> esté corriendo
+                    (<code>docker ps</code>).
+                </text>
+                break;
+            case 504:
+                <text>La consulta tardó demasiado. Intente acotar los filtros.</text>
+                break;
+            default:
+                <text>
+                    La solicitud no se pudo completar. El detalle técnico quedó
+                    registrado en el log de la aplicación.
+                </text>
+                break;
+        }
+    </p>
+</div>
+
+@if (Model.ShowRequestId)
+{
+    <p class="text-muted small">
+        <strong>Identificador de la solicitud:</strong> <code>@Model.RequestId</code>
+        — úselo para ubicar el error en el log.
+    </p>
+}
+
+<a class="btn btn-secondary" asp-controller="Home" asp-action="Index">Volver al inicio</a>

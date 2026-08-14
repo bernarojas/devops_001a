@@ -1,0 +1,73 @@
+@model DatosGraficoBarras
+@*
+    Ranking de barras horizontales, construido con HTML y CSS — no con SVG.
+
+    POR QUÉ NO SVG ACÁ
+    Un SVG con viewBox se escala completo para caber en su contenedor. En una
+    columna de ~690 px, un lienzo de 1000 unidades se reduce al 69%: un rótulo
+    de 12 px termina midiendo 8 px y deja de leerse. El texto queda rehén del
+    ancho disponible.
+
+    Con HTML el texto es texto real: mide lo que dice la hoja de estilos, sin
+    importar el ancho del contenedor. Además se recorta con puntos suspensivos,
+    se puede seleccionar y copiar, y los lectores de pantalla lo leen sin
+    depender de atributos ARIA.
+
+    El gráfico vertical sí sigue en SVG: ahí las etiquetas son cortas ("2025-03")
+    y hace falta calcular coordenadas de verdad.
+
+    SOBRE EL TOOLTIP
+    Se conserva, pero como complemento: muestra el nombre completo cuando se
+    recorta y el detalle de unidades. Nunca como única forma de leer la
+    etiqueta — eso impediría recorrer el gráfico de un vistazo y no funciona
+    en pantallas táctiles, donde no existe el hover.
+*@
+@{
+    var puntos = Model.Puntos;
+    decimal maximo = puntos.Count > 0 ? puntos.Max(p => p.Valor) : 1m;
+    if (maximo <= 0) { maximo = 1m; }
+}
+
+@if (puntos.Count == 0)
+{
+    <p class="text-muted small mb-0">Sin datos para graficar.</p>
+}
+else
+{
+    <ol class="ranking">
+        @foreach (var punto in puntos)
+        {
+            @* Cultura invariante en el ancho: la aplicación corre en es-CL y un
+               "width: 62,5%" es CSS inválido — la barra saldría con ancho cero.
+               Es la misma trampa que en las coordenadas SVG. *@
+            var porcentaje = Svg.N((double)(punto.Valor / maximo) * 100);
+
+            @* Cada segmento se codifica por separado y se unen con el separador
+               literal, para no terminar con el "·" doblemente codificado.
+               Ver la nota equivalente en _GraficoBarras. *@
+            var segmentos = (punto.Detalle ?? "")
+                            .Split(" · ", StringSplitOptions.RemoveEmptyEntries)
+                            .Select(System.Net.WebUtility.HtmlEncode);
+
+            var tooltip = $"<div class='tip-titulo'>{System.Net.WebUtility.HtmlEncode(punto.Etiqueta)}</div>"
+                        + $"<div class='tip-valor'>{string.Join(" · ", segmentos)}</div>";
+
+            <li class="ranking-fila"
+                data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top"
+                title="@tooltip">
+                <span class="ranking-nombre">@punto.Etiqueta</span>
+
+                <span class="ranking-pista">
+                    <span class="ranking-barra" style="width: @porcentaje%"></span>
+                </span>
+
+                <span class="ranking-valor">@Svg.Etiqueta(punto.Valor / Model.Divisor)</span>
+            </li>
+        }
+    </ol>
+
+    @if (!string.IsNullOrEmpty(Model.UnidadEjeY))
+    {
+        <p class="grafico-unidad">Valores en @Model.UnidadEjeY</p>
+    }
+}

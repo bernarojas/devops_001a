@@ -1,0 +1,136 @@
+@*
+    Estructura de panel de administración: menú lateral fijo + área de contenido.
+
+    Los iconos son SVG en línea, no una fuente de iconos externa. Motivo: la
+    aplicación no depende de ninguna descarga remota, así que se ve igual sin
+    conexión — igual que el resto de la solución. Además evita el parpadeo de
+    cajas vacías mientras carga una tipografía de iconos.
+*@
+@{
+    var controlador = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var accion      = ViewContext.RouteData.Values["action"]?.ToString() ?? "";
+
+    // Marca el enlace de la sección en la que estamos. Para Resumen hace falta
+    // distinguir también la acción, porque tiene dos entradas en el menú.
+    string Activo(string ctrl, string? act = null) =>
+        controlador.Equals(ctrl, StringComparison.OrdinalIgnoreCase)
+        && (act is null || accion.Equals(act, StringComparison.OrdinalIgnoreCase))
+            ? "activo" : "";
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Prueba Técnica</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/PruebaTecnica.Web.styles.css" asp-append-version="true" />
+</head>
+<body>
+
+<div class="disposicion">
+
+    <aside class="barra-lateral">
+
+        <a class="marca" asp-controller="Home" asp-action="Index">
+            <span class="marca-texto">CASO<span class="marca-ampersand">&amp;</span>CIA</span>
+            <span class="marca-sub">Prueba técnica</span>
+        </a>
+
+        <nav class="menu" aria-label="Navegación principal">
+
+            <p class="menu-titulo">General</p>
+
+            <a class="menu-enlace @Activo("Home")" asp-controller="Home" asp-action="Index">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>
+                </svg>
+                <span>Inicio</span>
+            </a>
+
+            <p class="menu-titulo">Datos</p>
+
+            <a class="menu-enlace @Activo("Ventas")" asp-controller="Ventas" asp-action="Index">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 3h14v18l-2.3-1.6L14.4 21l-2.4-1.6L9.6 21l-2.3-1.6L5 21z"/>
+                    <path d="M9 8h6M9 12h6"/>
+                </svg>
+                <span>Ventas</span>
+            </a>
+
+            <a class="menu-enlace @Activo("Productos")" asp-controller="Productos" asp-action="Index">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M21 8 12 3 3 8l9 5 9-5Z"/>
+                    <path d="M3 8v8l9 5 9-5V8"/>
+                </svg>
+                <span>Productos</span>
+            </a>
+
+            <p class="menu-titulo">Análisis</p>
+
+            <a class="menu-enlace @Activo("Resumen", "Index")" asp-controller="Resumen" asp-action="Index">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 21h18"/>
+                    <path d="M6 21V11M11 21V5M16 21v-7M21 21v-4"/>
+                </svg>
+                <span>Resumen mensual</span>
+            </a>
+
+            <a class="menu-enlace @Activo("Resumen", "PorCompania")" asp-controller="Resumen" asp-action="PorCompania">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/>
+                    <path d="M14 10h5a1 1 0 0 1 1 1v10M3 21h18M7 8h3M7 12h3M7 16h3"/>
+                </svg>
+                <span>Por compañía</span>
+            </a>
+
+            <p class="menu-titulo">Integración</p>
+
+            <a class="menu-enlace" href="/swagger" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m8 6-6 6 6 6M16 6l6 6-6 6"/>
+                </svg>
+                <span>API · Swagger</span>
+                <svg class="icono-externo" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>
+                </svg>
+            </a>
+        </nav>
+
+        <div class="barra-lateral-pie">
+            <span class="punto-estado" aria-hidden="true"></span>
+            SQL Server 2022 · .NET 9
+        </div>
+    </aside>
+
+    <div class="contenido">
+        <main role="main">
+
+            @if (TempData["Mensaje"] is string mensajeOk)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    @mensajeOk
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                </div>
+            }
+            @if (TempData["Error"] is string mensajeError)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    @mensajeError
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                </div>
+            }
+
+            @RenderBody()
+        </main>
+    </div>
+</div>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

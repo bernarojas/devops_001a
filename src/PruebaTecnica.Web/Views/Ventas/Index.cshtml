@@ -1,0 +1,161 @@
+@model PaginaDe<Venta>
+@{
+    ViewData["Title"] = "Ventas";
+    var filtro = (FiltroVentas)ViewBag.Filtro;
+
+    // Marca las filas que 02_analisis_datos.sql reportaría como anómalas, para
+    // que el problema se vea en la pantalla y no sólo en una query.
+    bool EsAnomala(Venta v) =>
+        v.Cantidad is null or <= 0 || v.Precio is null or <= 0m
+        || v.Fecha is null || v.IdProducto is null;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Ventas</h2>
+    <a class="btn btn-primary" asp-action="Create">Nueva venta</a>
+</div>
+
+<form method="get" class="card card-body bg-light mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label mb-1">Compañía</label>
+            <input name="Compania" value="@filtro.Compania" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1">Producto</label>
+            <input name="Producto" value="@filtro.Producto" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1">Desde</label>
+            <input name="Desde" type="date" value="@filtro.Desde?.ToString("yyyy-MM-dd")"
+                   class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1">Hasta</label>
+            <input name="Hasta" type="date" value="@filtro.Hasta?.ToString("yyyy-MM-dd")"
+                   class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="SoloAnomalias" value="true"
+                       id="chkAnomalias" @(filtro.SoloAnomalias ? "checked" : "") />
+                <label class="form-check-label" for="chkAnomalias">Sólo anomalías</label>
+            </div>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        </div>
+    </div>
+</form>
+
+<p class="text-muted">
+    <strong>@Model.TotalRegistros.ToString("N0")</strong> ventas
+    @if (Model.TotalPaginas > 0)
+    {
+        <text>— página @Model.PaginaActual de @Model.TotalPaginas</text>
+    }
+</p>
+
+<div class="table-responsive">
+    @* Sin table-striped ni table-dark: el estilo lo define .tabla-datos en
+       site.css, donde una línea divisoria fina reemplaza al cebrado. *@
+    <table class="table table-sm tabla-datos">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Compañía</th>
+                <th>Producto</th>
+                <th>Fecha</th>
+                <th class="numero">Cantidad</th>
+                <th class="numero">Precio</th>
+                <th class="numero">Total</th>
+                @* Encabezado explícito: una columna sin título obliga a deducir
+                   qué contiene, y un lector de pantalla la anuncia vacía. *@
+                <th class="text-center" style="width: 1%;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Items.Count == 0)
+            {
+                <tr><td colspan="8" class="text-center text-muted py-4">
+                    No hay ventas que coincidan con el filtro.
+                </td></tr>
+            }
+            @foreach (var venta in Model.Items)
+            {
+                <tr class="@(EsAnomala(venta) ? "fila-anomalia" : "")">
+                    <td>@venta.Id</td>
+                    <td>@venta.Compania</td>
+                    <td>
+                        @venta.NombreProducto
+                        @if (venta.IdProducto is null)
+                        {
+                            <span class="badge bg-danger badge-anomalia">sin maestro</span>
+                        }
+                    </td>
+                    <td>@venta.Fecha?.ToString("dd-MM-yyyy")</td>
+                    <td class="numero">
+                        @venta.Cantidad?.ToString("N0")
+                        @if (venta.Cantidad < 0)
+                        {
+                            <span class="badge bg-danger badge-anomalia">negativa</span>
+                        }
+                    </td>
+                    <td class="numero">
+                        @venta.Precio?.ToString(Formatos.Moneda)
+                        @if (venta.Precio == 0m)
+                        {
+                            <span class="badge bg-warning text-dark badge-anomalia">precio 0</span>
+                        }
+                    </td>
+                    <td class="numero">@venta.Total.ToString(Formatos.Moneda)</td>
+                    <td class="text-nowrap text-center">
+                        @* El nombre del producto va en el aria-label para que,
+                           fuera del contexto de la fila, se sepa qué se edita. *@
+                        <div class="btn-group btn-group-sm" role="group"
+                             aria-label="Acciones de la venta @venta.Id">
+                            <a asp-action="Edit" asp-route-id="@venta.Id"
+                               class="btn btn-outline-primary">Editar</a>
+                            <a asp-action="Details" asp-route-id="@venta.Id"
+                               class="btn btn-outline-secondary">Ver</a>
+                            <a asp-action="Delete" asp-route-id="@venta.Id"
+                               class="btn btn-outline-danger">Eliminar</a>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (Model.TotalPaginas > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm">
+            <li class="page-item @(Model.HayAnterior ? "" : "disabled")">
+                <a class="page-link"
+                   asp-action="Index"
+                   asp-route-Compania="@filtro.Compania"
+                   asp-route-Producto="@filtro.Producto"
+                   asp-route-Desde="@filtro.Desde?.ToString("yyyy-MM-dd")"
+                   asp-route-Hasta="@filtro.Hasta?.ToString("yyyy-MM-dd")"
+                   asp-route-SoloAnomalias="@filtro.SoloAnomalias"
+                   asp-route-Pagina="@(Model.PaginaActual - 1)">Anterior</a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">@Model.PaginaActual / @Model.TotalPaginas</span>
+            </li>
+            <li class="page-item @(Model.HaySiguiente ? "" : "disabled")">
+                <a class="page-link"
+                   asp-action="Index"
+                   asp-route-Compania="@filtro.Compania"
+                   asp-route-Producto="@filtro.Producto"
+                   asp-route-Desde="@filtro.Desde?.ToString("yyyy-MM-dd")"
+                   asp-route-Hasta="@filtro.Hasta?.ToString("yyyy-MM-dd")"
+                   asp-route-SoloAnomalias="@filtro.SoloAnomalias"
+                   asp-route-Pagina="@(Model.PaginaActual + 1)">Siguiente</a>
+            </li>
+        </ul>
+    </nav>
+}

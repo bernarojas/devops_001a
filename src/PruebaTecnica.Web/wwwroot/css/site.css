@@ -1,0 +1,693 @@
+/* ============================================================================
+   Capa visual — panel de administración
+
+   Bootstrap se usa como base (retícula, componentes, utilidades) y acá se
+   redefine lo necesario para que la aplicación tenga identidad propia en vez
+   de parecer una plantilla sin tocar.
+
+   Criterio: es una herramienta interna de trabajo. Se prioriza densidad de
+   información, legibilidad de cifras y jerarquía clara por encima de la
+   decoración. El color se usa para significar algo, no para adornar.
+
+   El acento coral toma el color de la marca CASO & CIA. Se aplica sólo a lo
+   accionable y a lo destacado; si se usara en todas partes dejaría de dirigir
+   la mirada a ningún lado.
+
+   Sin dependencias externas: ni tipografías ni iconos remotos. La aplicación
+   debe verse igual sin conexión, igual que el resto de la solución.
+   ========================================================================== */
+
+/* --- Tokens --------------------------------------------------------------- */
+:root {
+    /* Marca. El tono claro es sólo decorativo; el oscuro es el que se usa
+       cuando lleva texto encima, porque sobre blanco alcanza contraste
+       suficiente para cumplir WCAG AA. */
+    --marca:          #c62c38;
+    --marca-oscuro:   #a5232d;
+    --marca-brillo:   #e8434e;
+    --marca-suave:    #fdf0f1;
+
+    /* Superficies */
+    --fondo:          #f5f6f8;
+    --superficie:     #ffffff;
+    --superficie-sutil: #fafbfc;
+
+    /* Menú lateral */
+    --lateral:        #191c22;
+    --lateral-alto:   #23272f;
+    --lateral-texto:  #a8b0bd;
+    --lateral-tenue:  #6b7381;
+
+    /* Bordes */
+    --borde:          #e4e7eb;
+    --borde-fuerte:   #cfd4da;
+
+    /* Texto */
+    --texto:          #1a1d23;
+    --texto-suave:    #5a6472;
+    --texto-tenue:    #8a929e;
+
+    /* Estados */
+    --peligro:        #b42318;
+    --peligro-suave:  #fdf0ef;
+    --alerta:         #8a6100;
+    --alerta-suave:   #fdf6e3;
+    --exito:          #216e4e;
+    --exito-suave:    #eaf4ef;
+    --info:           #1f5fa8;
+    --info-suave:     #eef4fb;
+
+    --radio:          8px;
+    --radio-sm:       5px;
+    --sombra:         0 1px 2px rgba(26, 29, 35, .05);
+    --sombra-media:   0 2px 8px rgba(26, 29, 35, .07);
+
+    --ancho-lateral:  240px;
+}
+
+/* --- Base ----------------------------------------------------------------- */
+
+html { font-size: 15px; }
+
+body {
+    /* Pila del sistema: cada plataforma usa su tipografía nativa, se ve bien
+       y no exige descargar nada. */
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+}
+
+h1, h2, h3, h4, h5 { font-weight: 600; letter-spacing: -.012em; color: var(--texto); }
+h2 { font-size: 1.35rem; margin: 0; }
+
+a { color: var(--marca); text-decoration: none; }
+a:hover { color: var(--marca-oscuro); text-decoration: underline; }
+
+code {
+    font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: .85em;
+    background: var(--superficie-sutil);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-sm);
+    padding: .1em .35em;
+    color: var(--texto);
+}
+
+/* Foco visible y consistente. Es accesibilidad, no adorno: sin esto, quien
+   navega con teclado no sabe dónde está parado. */
+:focus-visible,
+.btn:focus-visible,
+.form-control:focus, .form-select:focus, .form-check-input:focus {
+    outline: 2px solid var(--marca);
+    outline-offset: 1px;
+    box-shadow: none;
+    border-color: var(--marca);
+}
+
+/* --- Disposición general -------------------------------------------------- */
+
+.disposicion {
+    display: flex;
+    min-height: 100vh;
+}
+
+.contenido {
+    flex: 1;
+    min-width: 0;              /* permite que las tablas anchas hagan scroll
+                                  interno en vez de estirar toda la página */
+    padding: 1.75rem 2rem 3rem;
+}
+
+/* --- Menú lateral --------------------------------------------------------- */
+
+.barra-lateral {
+    width: var(--ancho-lateral);
+    flex-shrink: 0;
+    background: var(--lateral);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+.marca {
+    display: block;
+    padding: 1.3rem 1.25rem 1.15rem;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+    text-decoration: none;
+}
+
+.marca:hover { text-decoration: none; }
+
+.marca-texto {
+    display: block;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    line-height: 1.1;
+}
+
+.marca-ampersand { color: var(--marca-brillo); margin: 0 .06em; }
+
+.marca-sub {
+    display: block;
+    color: var(--lateral-tenue);
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    margin-top: .3rem;
+}
+
+.menu { padding: .9rem .65rem; flex: 1; overflow-y: auto; }
+
+.menu-titulo {
+    color: var(--lateral-tenue);
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .11em;
+    margin: 1rem .6rem .35rem;
+}
+
+.menu-titulo:first-child { margin-top: 0; }
+
+.menu-enlace {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .5rem .6rem;
+    border-radius: var(--radio-sm);
+    color: var(--lateral-texto);
+    font-size: .86rem;
+    font-weight: 500;
+    /* El borde se reserva desde ya en transparente para que el elemento activo
+       no desplace el texto un par de píxeles al aparecer. */
+    border-left: 3px solid transparent;
+    transition: background-color .12s ease, color .12s ease;
+}
+
+.menu-enlace:hover {
+    background: var(--lateral-alto);
+    color: #fff;
+    text-decoration: none;
+}
+
+.menu-enlace.activo {
+    background: var(--lateral-alto);
+    color: #fff;
+    border-left-color: var(--marca-brillo);
+}
+
+.menu-enlace svg {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: .85;
+}
+
+.menu-enlace.activo svg { stroke: var(--marca-brillo); opacity: 1; }
+
+.icono-externo { width: 13px !important; height: 13px !important; margin-left: auto; opacity: .45; }
+
+.barra-lateral-pie {
+    padding: .85rem 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, .07);
+    color: var(--lateral-tenue);
+    font-size: .7rem;
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+}
+
+.punto-estado {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #3fb27f;
+    flex-shrink: 0;
+}
+
+/* En pantallas angostas el menú pasa arriba y se desplaza en horizontal.
+   Se resuelve sólo con CSS: sin JavaScript no hay estado que se desincronice. */
+@media (max-width: 820px) {
+    .disposicion { flex-direction: column; }
+
+    .barra-lateral { width: 100%; height: auto; position: static; }
+    .marca { padding: .9rem 1rem; border-bottom: none; }
+    .marca-sub { display: none; }
+
+    .menu { display: flex; gap: .25rem; overflow-x: auto; padding: 0 .6rem .6rem; }
+    .menu-titulo { display: none; }
+
+    .menu-enlace {
+        white-space: nowrap;
+        border-left: none;
+        border-bottom: 2px solid transparent;
+        border-radius: var(--radio-sm) var(--radio-sm) 0 0;
+    }
+
+    .menu-enlace.activo { border-left: none; border-bottom-color: var(--marca-brillo); }
+    .barra-lateral-pie { display: none; }
+    .contenido { padding: 1.25rem 1rem 2rem; }
+}
+
+/* --- Cabecera de página --------------------------------------------------- */
+/* El bloque "título + botón de acción" que abre cada pantalla. */
+
+.contenido > main > .d-flex:first-child,
+.encabezado-pagina {
+    padding-bottom: 1rem;
+    margin-bottom: 1.35rem !important;
+    border-bottom: 1px solid var(--borde);
+}
+
+/* --- Tarjetas ------------------------------------------------------------- */
+
+.card {
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    box-shadow: var(--sombra);
+}
+
+.card-body { padding: 1.15rem 1.3rem; }
+.card-title { font-size: .98rem; font-weight: 600; margin-bottom: .45rem; }
+
+/* Tarjetas de cifra. La franja superior coral las distingue del resto de
+   cajas y da un punto de color sin recargar. */
+.card.text-center {
+    position: relative;
+    overflow: hidden;
+}
+
+.card.text-center::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: var(--marca-brillo);
+}
+
+.card.text-center .card-body { padding: 1.35rem 1rem 1.2rem; }
+
+.card .fs-3 {
+    /* Dígitos de ancho fijo: las cifras de tarjetas contiguas quedan alineadas
+       y se comparan de un vistazo. */
+    font-variant-numeric: tabular-nums;
+    font-size: 1.65rem !important;
+    font-weight: 700;
+    letter-spacing: -.025em;
+    line-height: 1.15;
+    color: var(--texto);
+}
+
+.card .text-muted.small {
+    color: var(--texto-suave) !important;
+    font-size: .76rem;
+    letter-spacing: .01em;
+}
+
+/* --- Filtros -------------------------------------------------------------- */
+
+.card.bg-light { background: var(--superficie) !important; border: 1px solid var(--borde); }
+
+.form-label {
+    font-size: .74rem;
+    font-weight: 600;
+    color: var(--texto-suave);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: .3rem !important;
+}
+
+.form-control, .form-select {
+    border-color: var(--borde-fuerte);
+    border-radius: var(--radio-sm);
+    color: var(--texto);
+    font-size: .86rem;
+}
+
+.form-control::placeholder { color: var(--texto-tenue); }
+.form-text { color: var(--texto-suave); font-size: .77rem; }
+.form-check-label { font-size: .86rem; }
+.form-check-input:checked { background-color: var(--marca); border-color: var(--marca); }
+
+/* --- Botones -------------------------------------------------------------- */
+
+.btn {
+    border-radius: var(--radio-sm);
+    font-size: .82rem;
+    font-weight: 500;
+    padding: .38rem .8rem;
+    transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+
+.btn-primary { background-color: var(--marca); border-color: var(--marca); }
+.btn-primary:hover, .btn-primary:active, .btn-primary:focus {
+    background-color: var(--marca-oscuro) !important;
+    border-color: var(--marca-oscuro) !important;
+}
+
+.btn-outline-primary { color: var(--marca); border-color: var(--borde-fuerte); }
+.btn-outline-primary:hover {
+    background-color: var(--marca-suave);
+    border-color: var(--marca);
+    color: var(--marca-oscuro);
+}
+
+.btn-outline-secondary { color: var(--texto-suave); border-color: var(--borde-fuerte); }
+.btn-outline-secondary:hover {
+    background-color: var(--superficie-sutil);
+    border-color: var(--borde-fuerte);
+    color: var(--texto);
+}
+
+.btn-outline-danger { color: var(--peligro); border-color: var(--borde-fuerte); }
+.btn-outline-danger:hover {
+    background-color: var(--peligro-suave);
+    border-color: var(--peligro);
+    color: var(--peligro);
+}
+
+.btn-danger  { background-color: var(--peligro); border-color: var(--peligro); }
+.btn-warning { background-color: var(--alerta-suave); border-color: #e3cd94; color: var(--alerta); }
+
+/* Los tres botones de acción de cada fila comparten borde: se leen como un
+   solo control en lugar de tres elementos compitiendo por atención. */
+.btn-group .btn { padding: .26rem .58rem; font-size: .76rem; }
+
+/* --- Tablas --------------------------------------------------------------- */
+
+.tabla-datos {
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    margin-bottom: 0;
+    box-shadow: var(--sombra);
+}
+
+.tabla-datos thead th {
+    background: var(--superficie-sutil);
+    color: var(--texto-suave);
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: .62rem .75rem;
+    border-bottom: 1px solid var(--borde);
+    white-space: nowrap;
+    /* Al recorrer un listado largo el encabezado sigue visible: sin esto hay
+       que volver arriba para recordar qué columna se está mirando. */
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.tabla-datos tbody td {
+    padding: .5rem .75rem;
+    font-size: .845rem;
+    border-bottom: 1px solid var(--borde);
+    vertical-align: middle;
+}
+
+.tabla-datos tbody tr:last-child td { border-bottom: none; }
+
+/* Sin franjas alternadas: con ocho columnas el cebrado agrega ruido. Una línea
+   divisoria fina basta para seguir la fila, y el realce va al pasar el mouse. */
+.tabla-datos tbody tr:hover td { background-color: var(--superficie-sutil); }
+
+.tabla-datos tfoot td {
+    background: var(--superficie-sutil);
+    border-top: 2px solid var(--borde-fuerte);
+    font-size: .845rem;
+    padding: .6rem .75rem;
+}
+
+/* Columnas numéricas: a la derecha y con dígitos de ancho fijo, para comparar
+   magnitudes por la posición de la coma. */
+.numero { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Filas anómalas: marca lateral ámbar en vez de teñir toda la fila. Se nota
+   sin volver el listado ilegible. */
+.fila-anomalia td { background-color: var(--alerta-suave); }
+.fila-anomalia td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
+.fila-anomalia:hover td { background-color: #fbf1d6; }
+
+/* --- Distintivos ---------------------------------------------------------- */
+
+.badge {
+    font-weight: 600;
+    font-size: .69rem;
+    letter-spacing: .015em;
+    padding: .24em .52em;
+    border-radius: var(--radio-sm);
+}
+
+.badge-anomalia { font-size: .64rem; margin-left: .35rem; vertical-align: middle; }
+
+.badge.bg-success   { background-color: var(--exito-suave) !important;    color: var(--exito) !important;   border: 1px solid #c5e0d2; }
+.badge.bg-secondary { background-color: var(--superficie-sutil) !important; color: var(--texto-suave) !important; border: 1px solid var(--borde); }
+.badge.bg-danger    { background-color: var(--peligro-suave) !important;  color: var(--peligro) !important; border: 1px solid #f3c9c5; }
+.badge.bg-warning   { background-color: var(--alerta-suave) !important;   color: var(--alerta) !important;  border: 1px solid #ebd9a6; }
+
+/* --- Avisos --------------------------------------------------------------- */
+
+.alert {
+    border-radius: var(--radio);
+    border: 1px solid transparent;
+    font-size: .87rem;
+    padding: .85rem 1rem;
+}
+
+.alert-success { background: var(--exito-suave);   border-color: #c5e0d2; color: var(--exito); }
+.alert-danger  { background: var(--peligro-suave); border-color: #f3c9c5; color: var(--peligro); }
+.alert-warning { background: var(--alerta-suave);  border-color: #ebd9a6; color: var(--alerta); }
+.alert .alert-link { color: inherit; text-decoration: underline; font-weight: 600; }
+.alert-heading { font-size: .95rem; font-weight: 600; }
+
+/* --- Paginación ----------------------------------------------------------- */
+
+.pagination { margin-top: 1.1rem; margin-bottom: 0; }
+
+.page-link {
+    color: var(--texto-suave);
+    border-color: var(--borde);
+    font-size: .8rem;
+    padding: .32rem .72rem;
+}
+
+.page-link:hover {
+    background: var(--marca-suave);
+    border-color: var(--borde-fuerte);
+    color: var(--marca-oscuro);
+    text-decoration: none;
+}
+
+.page-item.disabled .page-link {
+    color: var(--texto-tenue);
+    background: var(--superficie-sutil);
+    border-color: var(--borde);
+}
+
+/* --- Listas de definición (pantallas de detalle) -------------------------- */
+
+dl.row dt {
+    font-size: .74rem;
+    font-weight: 600;
+    color: var(--texto-suave);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding-top: .55rem;
+}
+
+dl.row dd {
+    font-size: .9rem;
+    padding-top: .5rem;
+    padding-bottom: .55rem;
+    border-bottom: 1px solid var(--borde);
+    margin-bottom: 0;
+}
+
+.text-muted { color: var(--texto-suave) !important; }
+
+/* --- Gráficos SVG ---------------------------------------------------------
+   El SVG se dibuja en el servidor con un viewBox fijo; acá sólo se define
+   cómo se ve y cómo se adapta al ancho disponible.
+   ------------------------------------------------------------------------ */
+
+.grafico {
+    display: block;
+    width: 100%;
+    /* La altura la deduce el navegador del viewBox. Fijarla obligaría a
+       deformar el dibujo — y con él, el texto de los rótulos. */
+    height: auto;
+}
+
+.grafico-barra {
+    fill: var(--marca);
+    transition: fill .12s ease;
+}
+
+/* El resaltado responde al grupo, no a la barra: encima de ella hay una zona
+   sensible transparente que se lleva el hover. */
+.grafico-columna:hover .grafico-barra { fill: var(--marca-oscuro); }
+
+.grafico-zona { cursor: pointer; outline: none; }
+
+/* Foco por teclado: la zona es alcanzable con Tab y debe verse cuál está
+   seleccionada. */
+.grafico-zona:focus-visible { outline: 2px solid var(--marca); outline-offset: -2px; }
+
+/* Un período sin ventas se dibuja como una línea al ras del eje: comunica
+   "existe y vale cero", que es distinto de "no hay dato". */
+.grafico-barra-vacia { fill: var(--borde-fuerte); }
+
+.grafico-guia { stroke: var(--borde); stroke-width: 1; }
+.grafico-base { stroke: var(--borde-fuerte); stroke-width: 1; }
+
+.grafico-eje {
+    fill: var(--texto-tenue);
+    font-size: 11px;
+    font-family: inherit;
+}
+
+/* --- Ranking de barras horizontales (HTML, no SVG) ------------------------
+   Ver la nota de _GraficoBarrasHorizontal.cshtml: el texto en HTML mide lo que
+   dice esta hoja, mientras que dentro de un SVG con viewBox se encogería junto
+   con el resto del dibujo hasta volverse ilegible.
+   ------------------------------------------------------------------------ */
+
+.ranking {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+}
+
+.ranking-fila {
+    display: grid;
+    /* Nombre de ancho fijo, barra elástica, valor ajustado al contenido.
+       minmax(0, …) permite que el nombre se recorte en vez de empujar la barra. */
+    grid-template-columns: minmax(0, 10.5rem) 1fr auto;
+    align-items: center;
+    gap: .7rem;
+}
+
+.ranking-nombre {
+    font-size: .8rem;
+    color: var(--texto);
+    text-align: right;
+    /* Recorte con puntos suspensivos. El nombre completo queda en el atributo
+       title, así que nada se pierde. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ranking-pista {
+    display: block;
+    background: var(--superficie-sutil);
+    border-radius: 3px;
+    height: 16px;
+    overflow: hidden;
+}
+
+.ranking-barra {
+    display: block;
+    height: 100%;
+    background: var(--marca);
+    border-radius: 3px;
+    transition: background-color .12s ease;
+}
+
+.ranking-fila:hover .ranking-barra { background: var(--marca-oscuro); }
+
+.ranking-valor {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--texto-suave);
+    font-variant-numeric: tabular-nums;
+    min-width: 3.2rem;
+    text-align: right;
+}
+
+@media (max-width: 520px) {
+    .ranking-fila { grid-template-columns: minmax(0, 7rem) 1fr auto; }
+    .ranking-nombre { font-size: .74rem; }
+}
+
+.grafico-unidad {
+    color: var(--texto-tenue);
+    font-size: .72rem;
+    text-align: right;
+    margin: .4rem 0 0;
+}
+
+/* --- Tooltips ------------------------------------------------------------
+   Se usa el componente de Bootstrap (ya incluido en el bundle) en lugar del
+   tooltip nativo del navegador: aparece de inmediato, admite varias líneas con
+   formato y se reposiciona solo contra los bordes de la pantalla.
+   ------------------------------------------------------------------------ */
+
+.tooltip-inner {
+    background: var(--lateral);
+    color: #fff;
+    border-radius: var(--radio-sm);
+    padding: .5rem .65rem;
+    text-align: left;
+    max-width: 260px;
+    box-shadow: var(--sombra-media);
+}
+
+.tooltip.bs-tooltip-top .tooltip-arrow::before    { border-top-color: var(--lateral); }
+.tooltip.bs-tooltip-bottom .tooltip-arrow::before { border-bottom-color: var(--lateral); }
+.tooltip.bs-tooltip-start .tooltip-arrow::before  { border-left-color: var(--lateral); }
+.tooltip.bs-tooltip-end .tooltip-arrow::before    { border-right-color: var(--lateral); }
+
+.tip-titulo {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--lateral-texto);
+    margin-bottom: .15rem;
+}
+
+.tip-valor {
+    font-size: .95rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.tip-detalle {
+    font-size: .74rem;
+    color: var(--lateral-texto);
+    margin-top: .1rem;
+}
+
+.ranking-fila { cursor: default; }
+
+/* --- Impresión ------------------------------------------------------------
+   Las tablas de resumen se imprimen o se pasan a PDF: se quita todo lo que
+   sólo sirve en pantalla.
+   ------------------------------------------------------------------------ */
+@media print {
+    .barra-lateral, .pagination, .btn, form { display: none !important; }
+    .contenido { padding: 0; }
+    body { background: #fff; }
+    .tabla-datos { box-shadow: none; }
+    .tabla-datos thead th { position: static; }
+}

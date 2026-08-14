@@ -1,0 +1,158 @@
+@model PaginaDe<MatrizVentaMensual>
+@{
+    ViewData["Title"] = "Resumen mensual";
+    var producto = ViewBag.Producto as string;
+    var periodo = ViewBag.Periodo as DateOnly?;
+    bool incluirSinVentas = ViewBag.IncluirSinVentas ?? false;
+    var periodos = ViewBag.Periodos as IReadOnlyList<DateOnly> ?? new List<DateOnly>();
+}
+
+<h2>Resumen mensual por producto y período</h2>
+<p class="text-muted">
+    Sale de la vista SQL <code>dbo.vw_MatrizVentasMensual</code>, la misma que
+    alimenta la API y Power BI. Un único cálculo, un único número.
+</p>
+
+<form method="get" class="card card-body bg-light mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label mb-1">Producto</label>
+            <input name="producto" value="@producto" class="form-control form-control-sm"
+                   placeholder="Nombre o parte del nombre" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label mb-1">Período</label>
+            <select name="periodo" class="form-select form-select-sm">
+                <option value="">— Todos —</option>
+                @foreach (var p in periodos)
+                {
+                    <option value="@p.ToString("yyyy-MM-dd")" selected="@(periodo == p)">
+                        @p.ToString("yyyy-MM")
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="incluirSinVentas" value="true"
+                       id="chkCeros" @(incluirSinVentas ? "checked" : "") />
+                <label class="form-check-label" for="chkCeros">
+                    Mostrar períodos sin ventas (en 0)
+                </label>
+            </div>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        </div>
+    </div>
+</form>
+
+@{
+    var serie = ViewBag.Serie as IReadOnlyList<PuntoGrafico> ?? new List<PuntoGrafico>();
+}
+@if (serie.Count > 0)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">
+                Evolución mensual@(string.IsNullOrWhiteSpace(producto) ? "" : $" — {producto}")
+            </h5>
+            <p class="text-muted small mb-3">
+                Refleja el filtro de producto. No aplica el de período: una serie
+                temporal de un solo mes no muestra ninguna evolución.
+            </p>
+            @* Acá el gráfico ocupa todo el ancho, así que el lienzo es más
+               ancho y proporcionalmente más bajo. Con el lienzo por defecto
+               (1000x300) esta misma serie se dibujaría con unos 480 px de
+               alto, desproporcionado para lo que muestra. *@
+            @await Html.PartialAsync("_GraficoBarras", new DatosGraficoBarras
+            {
+                Puntos = serie,
+                UnidadEjeY = "millones de $",
+                CadaCuantasEtiquetas = 3,
+                AnchoLienzo = 1600,
+                AltoLienzo = 260,
+                IdAccesible = "serie-resumen"
+            })
+        </div>
+    </div>
+}
+
+<p class="text-muted">
+    <strong>@Model.TotalRegistros.ToString("N0")</strong> filas
+    @if (Model.TotalPaginas > 0)
+    {
+        <text>— página @Model.PaginaActual de @Model.TotalPaginas</text>
+    }
+    @if (!incluirSinVentas)
+    {
+        <text> · las combinaciones sin ventas están ocultas (marque la casilla para verlas)</text>
+    }
+</p>
+
+<div class="table-responsive">
+    <table class="table table-sm tabla-datos">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Período</th>
+                <th class="numero">Cantidad vendida</th>
+                <th class="numero">Total vendido</th>
+                <th class="numero">N.º de ventas</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Items.Count == 0)
+            {
+                <tr><td colspan="5" class="text-center text-muted py-4">
+                    No hay datos para el filtro aplicado.
+                </td></tr>
+            }
+            @foreach (var fila in Model.Items)
+            {
+                <tr class="@(fila.NumeroTransacciones == 0 ? "text-muted" : "")">
+                    <td>@fila.Producto</td>
+                    <td>@fila.Periodo.ToString("yyyy-MM-dd")</td>
+                    <td class="numero">@fila.CantidadVentas.ToString("N0")</td>
+                    <td class="numero">@fila.TotalVentas.ToString(Formatos.Moneda)</td>
+                    <td class="numero">@fila.NumeroTransacciones.ToString("N0")</td>
+                </tr>
+            }
+        </tbody>
+        @if (Model.Items.Count > 0)
+        {
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td colspan="2">Total de la página</td>
+                    <td class="numero">@Model.Items.Sum(f => f.CantidadVentas).ToString("N0")</td>
+                    <td class="numero">@Model.Items.Sum(f => f.TotalVentas).ToString(Formatos.Moneda)</td>
+                    <td class="numero">@Model.Items.Sum(f => f.NumeroTransacciones).ToString("N0")</td>
+                </tr>
+            </tfoot>
+        }
+    </table>
+</div>
+
+@if (Model.TotalPaginas > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm">
+            <li class="page-item @(Model.HayAnterior ? "" : "disabled")">
+                <a class="page-link" asp-action="Index" asp-route-producto="@producto"
+                   asp-route-periodo="@periodo?.ToString("yyyy-MM-dd")"
+                   asp-route-incluirSinVentas="@incluirSinVentas"
+                   asp-route-pagina="@(Model.PaginaActual - 1)">Anterior</a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">@Model.PaginaActual / @Model.TotalPaginas</span>
+            </li>
+            <li class="page-item @(Model.HaySiguiente ? "" : "disabled")">
+                <a class="page-link" asp-action="Index" asp-route-producto="@producto"
+                   asp-route-periodo="@periodo?.ToString("yyyy-MM-dd")"
+                   asp-route-incluirSinVentas="@incluirSinVentas"
+                   asp-route-pagina="@(Model.PaginaActual + 1)">Siguiente</a>
+            </li>
+        </ul>
+    </nav>
+}

@@ -1,0 +1,66 @@
+# =============================================================================
+#  Levanta la solución completa: SQL Server + aplicación web.
+#
+#      docker compose up -d --build
+#
+#  Después hay que restaurar el backup y ejecutar los scripts SQL, que es lo
+#  que hace .\scripts\setup.ps1 (o los pasos manuales del README).
+#
+#  Una vez arriba:
+#      Aplicación   http://localhost:5080
+#      Swagger      http://localhost:5080/swagger
+#      SQL Server   localhost,1433   (usuario sa)
+# =============================================================================
+
+services:
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-tecnica
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Tecnica#2026!Sql"
+      # Developer: gratuita y con todas las funciones de Enterprise, para uso
+      # no productivo. Es la edición correcta para una prueba técnica.
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      # Los datos sobreviven a `docker compose down`; para borrarlos de verdad
+      # hay que usar `docker compose down -v`.
+      - datos-sqlserver:/var/opt/mssql
+    networks: [tecnica-red]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -No -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: src/PruebaTecnica.Web/Dockerfile
+    container_name: prueba-tecnica-web
+    environment:
+      # Dentro de la red de Docker el servidor se resuelve por el nombre del
+      # servicio, no por localhost: cada contenedor tiene su propio localhost.
+      ConnectionStrings__Tecnica: "Server=sqlserver,1433;Database=Tecnica;User Id=sa;Password=Tecnica#2026!Sql;TrustServerCertificate=True;Encrypt=False;MultipleActiveResultSets=True"
+      ASPNETCORE_ENVIRONMENT: "Production"
+    ports:
+      - "5080:8080"
+    networks: [tecnica-red]
+    restart: unless-stopped
+    depends_on:
+      sqlserver:
+        # Espera a que SQL Server acepte conexiones, no sólo a que el
+        # contenedor exista. Sin esto la app arranca antes de tiempo.
+        condition: service_healthy
+
+networks:
+  tecnica-red:
+    driver: bridge
+
+volumes:
+  datos-sqlserver:

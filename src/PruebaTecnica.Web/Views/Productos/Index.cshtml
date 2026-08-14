@@ -1,0 +1,99 @@
+@model PaginaDe<Producto>
+@{
+    ViewData["Title"] = "Productos";
+    var busqueda = ViewBag.Busqueda as string;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Maestro de productos</h2>
+    <a class="btn btn-primary" asp-action="Create">Nuevo producto</a>
+</div>
+
+<form method="get" class="row g-2 mb-3" style="max-width: 600px;">
+    <div class="col">
+        <input name="busqueda" value="@busqueda" class="form-control form-control-sm"
+               placeholder="Buscar por nombre..." />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-primary">Buscar</button>
+        <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+    </div>
+</form>
+
+<p class="text-muted">
+    <strong>@Model.TotalRegistros.ToString("N0")</strong> productos
+    @if (Model.TotalPaginas > 0)
+    {
+        <text>— página @Model.PaginaActual de @Model.TotalPaginas</text>
+    }
+</p>
+
+<div class="table-responsive">
+    <table class="table table-sm tabla-datos">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Creado</th>
+                <th class="text-center" style="width: 1%;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Items.Count == 0)
+            {
+                <tr><td colspan="5" class="text-center text-muted py-4">
+                    No hay productos que coincidan con la búsqueda.
+                </td></tr>
+            }
+            @foreach (var producto in Model.Items)
+            {
+                <tr>
+                    <td>@producto.IdProducto</td>
+                    <td>@producto.NombreProducto</td>
+                    <td>
+                        @if (producto.Activo)
+                        {
+                            <span class="badge bg-success">Activo</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Inactivo</span>
+                        }
+                    </td>
+                    <td>@producto.FechaCreacion.ToString("dd-MM-yyyy")</td>
+                    <td class="text-nowrap text-center">
+                        <div class="btn-group btn-group-sm" role="group"
+                             aria-label="Acciones del producto @producto.NombreProducto">
+                            <a asp-action="Edit" asp-route-id="@producto.IdProducto"
+                               class="btn btn-outline-primary">Editar</a>
+                            <a asp-action="Details" asp-route-id="@producto.IdProducto"
+                               class="btn btn-outline-secondary">Ver</a>
+                            <a asp-action="Delete" asp-route-id="@producto.IdProducto"
+                               class="btn btn-outline-danger">Eliminar</a>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (Model.TotalPaginas > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm">
+            <li class="page-item @(Model.HayAnterior ? "" : "disabled")">
+                <a class="page-link" asp-action="Index" asp-route-busqueda="@busqueda"
+                   asp-route-pagina="@(Model.PaginaActual - 1)">Anterior</a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">@Model.PaginaActual / @Model.TotalPaginas</span>
+            </li>
+            <li class="page-item @(Model.HaySiguiente ? "" : "disabled")">
+                <a class="page-link" asp-action="Index" asp-route-busqueda="@busqueda"
+                   asp-route-pagina="@(Model.PaginaActual + 1)">Siguiente</a>
+            </li>
+        </ul>
+    </nav>
+}

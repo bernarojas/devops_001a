@@ -1,0 +1,47 @@
+@model VentaInput
+@*
+    Formulario compartido por Create y Edit. Un solo archivo para los dos casos
+    evita que las validaciones se desincronicen entre alta y edición.
+*@
+
+<div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <label asp-for="Compania" class="form-label"></label>
+        <input asp-for="Compania" class="form-control" autocomplete="off" />
+        <span asp-validation-for="Compania" class="text-danger small"></span>
+    </div>
+
+    <div class="col-md-6">
+        <label asp-for="IdProducto" class="form-label"></label>
+        <select asp-for="IdProducto" asp-items="@(ViewBag.Productos as SelectList)" class="form-select">
+            <option value="">— Seleccione un producto —</option>
+        </select>
+        <span asp-validation-for="IdProducto" class="text-danger small"></span>
+        <div class="form-text">Sólo se listan productos activos del maestro.</div>
+    </div>
+
+    <div class="col-md-4">
+        <label asp-for="Fecha" class="form-label"></label>
+        <input asp-for="Fecha" type="date" class="form-control" />
+        <span asp-validation-for="Fecha" class="text-danger small"></span>
+    </div>
+
+    <div class="col-md-4">
+        <label asp-for="Cantidad" class="form-label"></label>
+        <input asp-for="Cantidad" type="number" min="1" step="1" class="form-control" />
+        <span asp-validation-for="Cantidad" class="text-danger small"></span>
+    </div>
+
+    <div class="col-md-4">
+        <label asp-for="Precio" class="form-label"></label>
+        <input asp-for="Precio" type="number" min="0.01" step="0.01" class="form-control" />
+        <span asp-validation-for="Precio" class="text-danger small"></span>
+    </div>
+</div>
+
+<div class="mt-4 d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Guardar</button>
+    <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
+</div>

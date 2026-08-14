@@ -1,0 +1,57 @@
+@model Producto
+@{
+    ViewData["Title"] = "Eliminar producto";
+    int ventas = ViewBag.CantidadVentas ?? 0;
+    bool sePuedeEliminar = ventas == 0;
+}
+
+<h2 class="text-danger">Eliminar producto</h2>
+
+@if (sePuedeEliminar)
+{
+    <div class="alert alert-warning mt-3" style="max-width: 700px;">
+        Este producto no tiene ventas asociadas, así que se puede eliminar.
+        La acción no se puede deshacer.
+    </div>
+}
+else
+{
+    @* Se avisa acá, antes de confirmar, en vez de dejar que el usuario haga
+       clic y recién entonces recibir el rechazo. *@
+    <div class="alert alert-danger mt-3" style="max-width: 700px;">
+        <strong>No se puede eliminar.</strong>
+        Este producto tiene <strong>@ventas.ToString("N0")</strong> ventas asociadas.
+        Eliminarlo destruiría historial real de ventas.
+        <hr />
+        La alternativa correcta es <strong>desactivarlo</strong>: deja de estar
+        disponible para ventas nuevas, pero conserva todo su historial.
+    </div>
+}
+
+<dl class="row" style="max-width: 600px;">
+    <dt class="col-sm-5">Id</dt>
+    <dd class="col-sm-7">@Model.IdProducto</dd>
+
+    <dt class="col-sm-5">Nombre</dt>
+    <dd class="col-sm-7">@Model.NombreProducto</dd>
+
+    <dt class="col-sm-5">Ventas asociadas</dt>
+    <dd class="col-sm-7">@ventas.ToString("N0")</dd>
+</dl>
+
+<div class="d-flex gap-2">
+    @if (sePuedeEliminar)
+    {
+        <form asp-action="Delete" asp-route-id="@Model.IdProducto" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+        </form>
+    }
+    else
+    {
+        <a asp-action="Edit" asp-route-id="@Model.IdProducto" class="btn btn-warning">
+            Desactivar en su lugar
+        </a>
+    }
+    <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
+</div>
