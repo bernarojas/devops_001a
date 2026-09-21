@@ -58,8 +58,11 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    mem_limit: 128m
-    cpus: 0.25
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: 0.25
 
     # No se levanta hasta que la aplicación esté sana. Sin esto, el proxy
     # aceptaría tráfico y devolvería 502 durante el arranque.
@@ -102,21 +105,16 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    mem_limit: 640m
-    cpus: 0.75
+    deploy:
+      resources:
+        limits:
+          memory: 640m
+          cpus: '0.75'
 
-    # La comprobación consulta /salud, que NO toca la base de datos.
-    # Si consultara la base, una caída del motor haría que Docker reiniciara la
-    # aplicación en bucle, cuando la aplicación no tiene ningún problema.
-    # Se usa 127.0.0.1 y no "localhost" por la misma razón que en el proxy: con
-    # el nombre, la resolución intenta IPv6 primero y la comprobación falla con
-    # el servicio sano.
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/salud || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+    # No se declara healthcheck acá: la imagen propia ya la trae horneada, y
+    # repetirla en este archivo crearía dos definiciones que se separan con el
+    # tiempo. La del motor de base de datos sí va acá, porque esa imagen es de
+    # Microsoft y no la construye el equipo.
 
     depends_on:
       # Dos condiciones distintas y las dos necesarias: el motor tiene que
@@ -160,8 +158,11 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    mem_limit: 2048m
-    cpus: 1.0
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
+          cpus: 1.0
 
     healthcheck:
       test:
@@ -208,8 +209,11 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    mem_limit: 256m
-    cpus: 0.5
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: 0.5
 
     depends_on:
       datos:

@@ -58,4 +58,18 @@ USER $APP_UID
 EXPOSE 8080
 ENV ASPNETCORE_HTTP_PORTS=8080
 
+# La comprobación se declara acá, dentro de la imagen, y no en el archivo de
+# orquestación. Así viaja con el artefacto hasta el registro y cualquier
+# orquestador que lo ejecute la hereda sin configuración adicional: quien sepa
+# ejecutar la imagen sabe también cómo preguntarle si está sana.
+#
+# Consulta /salud, que NO toca la base de datos. Si consultara la base, una
+# caída del motor haría que Docker reiniciara la aplicación en bucle, cuando
+# la aplicación no tiene ningún problema.
+#
+# Se usa 127.0.0.1 y no "localhost": con el nombre, la resolución intenta IPv6
+# primero y la comprobación falla con el servicio perfectamente sano.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:8080/salud || exit 1
+
 ENTRYPOINT ["dotnet", "PruebaTecnica.Web.dll"]
