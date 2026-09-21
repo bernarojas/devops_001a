@@ -37,10 +37,11 @@ NSG_DATOS="${NSG_DATOS:-nsg-data}"
 IP_PUBLICA="${IP_PUBLICA:-ip-web-publica}"
 
 # --- Máquina virtual ----------------------------------------------------------
-# Es una máquina NUEVA. La de la experiencia anterior, vm-web-01, se conserva
-# o se elimina según convenga, pero el despliegue de esta experiencia apunta
-# acá. Ver la advertencia sobre la cuota en 30-maquina-virtual.sh.
-MAQUINA="${MAQUINA:-vm-web-02}"
+# La máquina de la Experiencia 1, que esta experiencia reutiliza en lugar de
+# crear una segunda. La cuota de la suscripción no da para dos a la vez, y
+# tener una sola es justamente lo que obliga a segmentar en contenedores en
+# vez de en máquinas: el argumento central del informe.
+MAQUINA="${MAQUINA:-vm-web-01}"
 
 # Standard_B2s son exactamente dos núcleos y 4 GB, que es el tamaño que el
 # informe describe y el que sostiene el argumento de la contenerización: las

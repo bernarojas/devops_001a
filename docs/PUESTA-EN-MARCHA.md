@@ -26,7 +26,7 @@ camino, están documentados al final.
 | Grupo de seguridad | `nsg-data` | Reglas de la capa de datos |
 | Registro de contenedores | lo eliges tú | Guarda las imágenes |
 | Dirección IP pública | `ip-web-publica` | Estática |
-| Máquina virtual | `vm-web-02` | Ubuntu 22.04, 2 núcleos, 4 GB |
+| Máquina virtual | `vm-web-01` | Ubuntu 22.04, 2 núcleos, 4 GB |
 
 ---
 
@@ -339,7 +339,7 @@ Portal → **Máquinas virtuales** → **+ Crear** → **Máquina virtual de Azu
 | Campo | Valor |
 |---|---|
 | Grupo de recursos | `rg-devops-001a` |
-| Nombre de la máquina virtual | `vm-web-02` |
+| Nombre de la máquina virtual | `vm-web-01` |
 | Región | **tu región** |
 | Opciones de disponibilidad | `No se requiere redundancia de infraestructura` |
 | Imagen | `Ubuntu Server 22.04 LTS - x64 Gen2` |
@@ -348,7 +348,7 @@ Portal → **Máquinas virtuales** → **+ Crear** → **Máquina virtual de Azu
 | Tipo de autenticación | `Clave pública SSH` |
 | Nombre de usuario | `azureuser` |
 | Origen de la clave pública SSH | `Generar nuevo par de claves` |
-| Nombre del par de claves | `vm-web-02_key` |
+| Nombre del par de claves | `vm-web-01_key` |
 | **Puertos de entrada públicos** | **`Ninguno`** |
 
 Para elegir el tamaño hay que pulsar **Ver todos los tamaños** y buscar
@@ -396,13 +396,13 @@ Al pulsar *Crear nuevo* en la dirección IP:
 **Revisar y crear** → **Crear**.
 
 Aparece una ventana: **Descargar clave privada y crear recurso**. Púlsala. Se
-descarga `vm-web-02_key.pem`.
+descarga `vm-web-01_key.pem`.
 
 **Ese archivo es la única forma de entrar a la máquina y no se puede volver a
 descargar.** Muévelo a un lugar seguro, por ejemplo:
 
 ```
-C:\Users\Dev\.ssh\vm-web-02_key.pem
+C:\Users\Dev\.ssh\vm-web-01_key.pem
 ```
 
 Cuando termine, entra al recurso y **anota la dirección IP pública** que
@@ -478,8 +478,8 @@ Copia **solo ese código** (empieza con A, unos 29 caracteres).
 En Git Bash:
 
 ```bash
-chmod 600 /c/Users/Dev/.ssh/vm-web-02_key.pem
-ssh -i /c/Users/Dev/.ssh/vm-web-02_key.pem azureuser@LA-DIRECCION-IP
+chmod 600 /c/Users/Dev/.ssh/vm-web-01_key.pem
+ssh -i /c/Users/Dev/.ssh/vm-web-01_key.pem azureuser@LA-DIRECCION-IP
 ```
 
 La primera vez pregunta si confías en la máquina: escribe `yes`.
@@ -489,7 +489,7 @@ o tu IP cambió. Vuelve a <https://ifconfig.me> y corrige la regla.
 
 ### 10.3 Ejecuta la preparación
 
-Ya **dentro** de la máquina (el prompt dice `azureuser@vm-web-02`):
+Ya **dentro** de la máquina (el prompt dice `azureuser@vm-web-01`):
 
 ```bash
 git clone https://github.com/bernarojas/devops_001a.git
@@ -541,7 +541,7 @@ informe.**
 ### Si el despliegue falla por permisos de Docker
 
 Es el fallo más común y se arregla reiniciando la máquina: portal →
-`vm-web-02` → **Reiniciar**. Después, en Actions, pulsa **Re-run jobs**.
+`vm-web-01` → **Reiniciar**. Después, en Actions, pulsa **Re-run jobs**.
 
 ---
 
@@ -567,7 +567,7 @@ Y en el informe, anexo E, escribe:
 
 Mientras no estés trabajando ni grabando, apaga la máquina.
 
-Portal → `vm-web-02` → botón **Detener** (arriba). Azure pregunta si quieres
+Portal → `vm-web-01` → botón **Detener** (arriba). Azure pregunta si quieres
 conservar la dirección IP: como es estática, se conserva igual.
 
 Para volver: botón **Iniciar**. Tarda un minuto y todo vuelve como estaba.

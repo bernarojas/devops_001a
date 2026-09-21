@@ -48,7 +48,7 @@ que el artefacto probado y el ejecutado sean literalmente el mismo.
    Internet
       │  :80
       ▼
- ┌─ vm-web-02  (snet-web 10.10.1.0/24) ───────────────────────┐
+ ┌─ vm-web-01  (snet-web 10.10.1.0/24) ───────────────────────┐
  │                                                            │
  │   ┌─ red-borde (bridge) ────────────────────────────────┐  │
  │   │   ventas-proxy    nginx 1.27 / Alpine    128 MB     │  │
