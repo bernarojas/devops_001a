@@ -39,8 +39,31 @@ if [[ -z "$IP_ADMINISTRADOR" ]]; then
         error "    IP_ADMINISTRADOR=203.0.113.7 bash scripts/infraestructura/10-red.sh"
         exit 1
     fi
+
+    # CUIDADO CON EJECUTAR ESTO DESDE CLOUD SHELL.
+    #
+    # La detección devuelve la dirección desde la que SALE la petición, y si el
+    # script corre en Cloud Shell esa dirección es la de Azure, no la de quien
+    # administra. La regla queda autorizando a Cloud Shell y el administrador
+    # se encuentra con un tiempo de espera agotado al intentar entrar por SSH,
+    # sin ninguna pista de por qué.
+    #
+    # Ya ocurrió una vez en este proyecto. El síntoma es exactamente ese, y la
+    # causa es invisible salvo que uno mire el origen de la regla.
+    if [[ -n "${AZUREPS_HOST_ENVIRONMENT:-}" || -n "${ACC_CLOUD:-}" ]]; then
+        aviso "Parece que esto se está ejecutando desde Azure Cloud Shell."
+        aviso "La dirección detectada ($IP_ADMINISTRADOR) es la de Cloud Shell,"
+        aviso "NO la de su computador, y la regla de SSH quedaría inservible."
+        aviso ""
+        aviso "Averigüe su dirección abriendo https://ifconfig.me en el"
+        aviso "navegador y vuelva a ejecutar indicándola:"
+        aviso "    IP_ADMINISTRADOR=<su-direccion> bash $0"
+        exit 1
+    fi
 fi
 listo "SSH se permitirá únicamente desde $IP_ADMINISTRADOR"
+aviso "Si su conexión cambia de dirección, esta regla dejará de cubrirle y el"
+aviso "SSH agotará el tiempo de espera. Vuelva a ejecutar este script entonces."
 
 # -----------------------------------------------------------------------------
 #  Grupo de recursos
