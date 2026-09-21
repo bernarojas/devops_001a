@@ -15,3 +15,8 @@ obj/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Variables del despliegue: contienen la contraseña del motor y la etiqueta de
+# la compilación en curso. El archivo lo escribe la canalización en la máquina
+# virtual, con permisos restringidos a su propietario.
+.env

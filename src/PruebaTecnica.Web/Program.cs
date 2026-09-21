@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -9,6 +10,40 @@ using PruebaTecnica.Web.Models;
 using PruebaTecnica.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ---------------------------------------------------------------------------
+// Ejecución detrás de un proxy inverso
+// ---------------------------------------------------------------------------
+// En el despliegue contenerizado la aplicación no recibe tráfico de Internet
+// directamente: lo recibe nginx, que reenvía en HTTP plano por la red interna
+// de Docker. Dos consecuencias, y las dos hay que declararlas explícitamente:
+//
+//   1. Sin X-Forwarded-*, la aplicación vería como cliente la dirección del
+//      proxy y creería que todo llega por HTTP. Los registros perderían la IP
+//      real de quien consulta.
+//   2. La redirección a HTTPS debe quedar en manos del proxy. Si la aplicación
+//      la aplicara, devolvería un 307 hacia https://web:8080, una dirección que
+//      sólo existe dentro de la red de Docker y que nadie puede alcanzar.
+//
+// Se activa con una variable de entorno en lugar de por omisión porque confiar
+// en cabeceras que puede falsificar el cliente sólo es correcto cuando se sabe
+// que hay un proxy delante.
+var detrasDeProxy = builder.Configuration.GetValue("DetrasDeProxy", false);
+
+if (detrasDeProxy)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(opciones =>
+    {
+        opciones.ForwardedHeaders =
+            ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+        // Las listas vienen pobladas con localhost por omisión, y el proxy no
+        // es localhost sino otro contenedor. Se vacían porque el único origen
+        // posible es la red de borde, que no está expuesta a Internet.
+        opciones.KnownNetworks.Clear();
+        opciones.KnownProxies.Clear();
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Base de datos
@@ -114,6 +149,13 @@ var app = builder.Build();
 // Pipeline HTTP
 // ---------------------------------------------------------------------------
 
+// Las cabeceras reenviadas se leen antes que nada: el resto del pipeline debe
+// ver ya la dirección y el esquema reales del cliente, no los del proxy.
+if (detrasDeProxy)
+{
+    app.UseForwardedHeaders();
+}
+
 // Va primero para que atrape también lo que fallen los middlewares siguientes.
 app.UsarManejadorDeErrores();
 
@@ -124,9 +166,49 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+if (!detrasDeProxy)
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseRouting();
 app.UseAuthorization();
+
+// ---------------------------------------------------------------------------
+// Puntos de comprobación de estado
+// ---------------------------------------------------------------------------
+// Son dos y responden preguntas distintas. Confundirlas es un error caro:
+//
+//   /salud  (liveness)  — ¿el proceso está vivo y atendiendo? No toca la base.
+//                         Si consultara la base, una caída del motor haría que
+//                         Docker reiniciara la aplicación en bucle, cuando la
+//                         aplicación no tiene ningún problema.
+//
+//   /listo  (readiness) — ¿puede además atender una petición real? Sí consulta
+//                         la base, porque sin ella no hay respuesta útil que dar.
+//
+// Se declaran antes de las rutas MVC para que ninguna convención de ruteo las
+// capture, y quedan fuera de Swagger porque no son parte de la API del negocio.
+app.MapGet("/salud", () => Results.Ok(new { estado = "vivo" }))
+   .ExcludeFromDescription();
+
+app.MapGet("/listo", async (AppDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        // CanConnectAsync abre y cierra una conexión: es la comprobación más
+        // barata que realmente prueba el camino completo hasta el motor.
+        return await db.Database.CanConnectAsync(ct)
+            ? Results.Ok(new { estado = "listo" })
+            : Results.Json(new { estado = "sin-base-de-datos" }, statusCode: 503);
+    }
+    catch (Exception)
+    {
+        // El detalle ya queda en el registro del contenedor; hacia afuera no se
+        // filtra la causa, que podría incluir el nombre del servidor o el usuario.
+        return Results.Json(new { estado = "sin-base-de-datos" }, statusCode: 503);
+    }
+}).ExcludeFromDescription();
 
 // Swagger queda disponible siempre para que el evaluador pueda abrirlo
 // sin tener que cambiar el entorno de ejecución.

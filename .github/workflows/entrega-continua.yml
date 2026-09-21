@@ -1,0 +1,218 @@
+# =============================================================================
+#  ENTREGA Y DESPLIEGUE CONTINUOS
+#
+#  Se dispara únicamente al integrar en la rama principal. Recorre el camino
+#  completo: pruebas -> imágenes publicadas en el registro -> despliegue en la
+#  máquina virtual -> verificación.
+#
+#  DOS DECISIONES QUE VALE LA PENA LEER ANTES DEL CÓDIGO
+#
+#  1. Las imágenes se construyen UNA sola vez, acá, en el agente alojado por
+#     GitHub, y viajan a la máquina virtual a través del registro. La máquina
+#     no compila: no tiene el SDK, ni el código fuente, ni las dependencias de
+#     compilación. Construir en el destino rompería la garantía central de la
+#     integración continua, porque lo que se ejecutaría sería el resultado de
+#     una compilación distinta de la que superó las pruebas.
+#
+#  2. El despliegue corre en un agente AUTOALOJADO dentro de la propia máquina
+#     virtual. Ese agente se conecta DE SALIDA hacia GitHub, de modo que no
+#     hace falta abrir ningún puerto de administración hacia Internet ni
+#     autorizar los rangos de direcciones de GitHub en el grupo de seguridad
+#     de red. La alternativa —desplegar por SSH desde un agente alojado—
+#     obligaría a abrir el puerto 22 a un rango de direcciones amplio y
+#     cambiante, que es justo lo que la Experiencia 1 cerró.
+# =============================================================================
+
+name: Entrega continua
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Sin cancelación en curso, y a propósito: interrumpir un despliegue a la
+# mitad puede dejar la solución en un estado intermedio. Las ejecuciones se
+# encolan y se completan una por una.
+concurrency:
+  group: despliegue-produccion
+  cancel-in-progress: false
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  #  1. Pruebas
+  # ---------------------------------------------------------------------------
+  #  El mismo flujo reutilizable que ejecuta la integración continua. Si falla,
+  #  no se construye ni se publica nada.
+  compilar-y-probar:
+    name: Compilación y pruebas
+    uses: ./.github/workflows/compilar-y-probar.yml
+
+  # ---------------------------------------------------------------------------
+  #  2. Publicación de las imágenes en el registro
+  # ---------------------------------------------------------------------------
+  publicar-imagenes:
+    name: Publicar las imágenes en el registro
+    runs-on: ubuntu-latest
+    needs: compilar-y-probar
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v4
+
+      - name: Preparar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Autenticarse en Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRO_SERVIDOR }}
+          username: ${{ secrets.REGISTRO_USUARIO }}
+          password: ${{ secrets.REGISTRO_CLAVE }}
+
+      # Dos etiquetas por imagen, y responden a usos distintos:
+      #
+      #   - el NÚMERO DE EJECUCIÓN identifica una versión exacta y es la que
+      #     usa el despliegue. Conecta la imagen en marcha con el commit que la
+      #     originó y con la ejecución que la construyó y la probó.
+      #   - "latest" apunta siempre a la última y existe para consultas
+      #     manuales. Desplegar con ella sería cómodo y equivocado: dos
+      #     máquinas que la descargaran en momentos distintos podrían terminar
+      #     ejecutando versiones distintas, y no habría forma de saberlo.
+      - name: Construir y publicar la imagen de la aplicación
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/PruebaTecnica.Web/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.REGISTRO_SERVIDOR }}/ventas-web:${{ github.run_number }}
+            ${{ secrets.REGISTRO_SERVIDOR }}/ventas-web:latest
+          # La etiqueta OCI deja el commit exacto grabado en los metadatos de
+          # la imagen: basta un `docker inspect` para saber qué se está
+          # ejecutando, sin depender de ningún registro externo.
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Construir y publicar la imagen del proxy
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/proxy/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.REGISTRO_SERVIDOR }}/ventas-proxy:${{ github.run_number }}
+            ${{ secrets.REGISTRO_SERVIDOR }}/ventas-proxy:latest
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=proxy
+          cache-to: type=gha,scope=proxy,mode=max
+
+      - name: Resumen de lo publicado
+        run: |
+          {
+            echo "### Imágenes publicadas"
+            echo ""
+            echo "| Repositorio | Etiqueta |"
+            echo "|---|---|"
+            echo "| ventas-web | \`${{ github.run_number }}\` y \`latest\` |"
+            echo "| ventas-proxy | \`${{ github.run_number }}\` y \`latest\` |"
+            echo ""
+            echo "Commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  #  3. Despliegue en la máquina virtual
+  # ---------------------------------------------------------------------------
+  desplegar:
+    name: Desplegar en la máquina virtual
+    needs: publicar-imagenes
+
+    # Agente autoalojado, instalado dentro de la máquina virtual. Las tres
+    # etiquetas lo identifican sin ambigüedad frente a cualquier otro agente
+    # que el repositorio pudiera registrar más adelante.
+    runs-on: [self-hosted, linux, ventas]
+
+    # El entorno permite exigir aprobación manual antes de desplegar y es
+    # donde conviene declarar la dirección pública, para que GitHub la muestre
+    # como enlace en la ejecución.
+    environment:
+      name: produccion
+      url: http://${{ vars.DIRECCION_PUBLICA }}
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v4
+
+      # Sólo viajan a la máquina el archivo de orquestación, los scripts SQL y
+      # los de despliegue. El código fuente de la aplicación no se usa acá: lo
+      # que se ejecuta viene íntegramente de las imágenes del registro.
+      - name: Escribir las variables del despliegue
+        env:
+          REGISTRO: ${{ secrets.REGISTRO_SERVIDOR }}
+          ETIQUETA: ${{ github.run_number }}
+          MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
+        run: |
+          # umask 077 ANTES de crear el archivo: así nace con permisos 600 y
+          # la contraseña nunca llega a existir en disco siendo legible por
+          # otros usuarios de la máquina, ni siquiera por un instante.
+          umask 077
+          {
+            echo "REGISTRO=${REGISTRO}"
+            echo "ETIQUETA=${ETIQUETA}"
+            echo "MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}"
+          } > .env
+          echo "Archivo .env escrito con permisos $(stat -c '%a' .env)."
+
+      - name: Autenticarse en Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRO_SERVIDOR }}
+          username: ${{ secrets.REGISTRO_USUARIO }}
+          password: ${{ secrets.REGISTRO_CLAVE }}
+
+      # Descargar antes de recrear acorta la ventana de indisponibilidad: si la
+      # descarga falla, la versión anterior sigue en marcha y no se tocó nada.
+      - name: Descargar las imágenes
+        run: docker compose -f docker-compose.prod.yml pull
+
+      - name: Levantar la solución
+        run: |
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          docker compose -f docker-compose.prod.yml ps
+
+      # La misma verificación que el equipo ejecuta a mano, ejecutada en cada
+      # publicación. Devuelve un código distinto de cero si alguna comprobación
+      # falla, y eso marca el despliegue como fallido en lugar de darlo por
+      # bueno porque los contenedores "arrancaron".
+      - name: Verificar la solución desplegada
+        run: bash scripts/despliegue/verificar-stack.sh | tee verificacion.txt
+
+      - name: Adjuntar el resultado de la verificación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verificacion-despliegue-${{ github.run_number }}
+          path: verificacion.txt
+          retention-days: 30
+
+      # Las imágenes de despliegues anteriores se acumulan y el disco de la
+      # máquina no es grande. Se limpia lo que ya no usa ningún contenedor,
+      # conservando lo de las últimas 48 horas por si hiciera falta volver
+      # atrás sin descargar de nuevo.
+      - name: Liberar espacio de imágenes antiguas
+        if: always()
+        run: docker image prune --all --force --filter "until=48h"
+
+      # El cierre de sesión va al final y con if: always() para que la
+      # credencial del registro no quede almacenada en la máquina aunque un
+      # paso anterior haya fallado.
+      - name: Cerrar la sesión del registro
+        if: always()
+        run: docker logout ${{ secrets.REGISTRO_SERVIDOR }}

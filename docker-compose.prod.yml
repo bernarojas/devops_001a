@@ -1,0 +1,240 @@
+# =============================================================================
+#  ORQUESTACIÓN DE PRODUCCIÓN — sistema de consolidación de ventas
+#
+#  Cuatro contenedores sobre una sola máquina virtual. Tres permanentes y uno
+#  de vida corta:
+#
+#    ventas-proxy         nginx 1.27 / Alpine   permanente   128 MB   0,25 CPU
+#    ventas-web           .NET 9 / Debian       permanente   640 MB   0,75 CPU
+#    ventas-datos         SQL Server 2022       permanente  2048 MB   1,00 CPU
+#    ventas-migraciones   SQL Server 2022       vida corta   256 MB   0,50 CPU
+#
+#  DIFERENCIAS CON docker-compose.yml (el de desarrollo), que son el objeto de
+#  esta experiencia:
+#
+#    1. No construye NADA. Las imágenes se descargan del registro con la
+#       etiqueta exacta que produjo la canalización. La máquina virtual no
+#       necesita el SDK, ni el código fuente, ni compilar: sobre dos núcleos,
+#       compilar competiría con el servicio en marcha.
+#    2. Un solo contenedor publica un puerto. En desarrollo lo hacían la
+#       aplicación y el motor; en un servidor con dirección pública, eso deja
+#       la base de datos accesible desde Internet.
+#    3. La contraseña llega del entorno, no escrita en el archivo.
+#    4. Dos redes, y la de datos declarada interna.
+#    5. Cada contenedor tiene cuota de CPU y memoria.
+#
+#  Uso en la máquina virtual:
+#      docker compose -f docker-compose.prod.yml pull
+#      docker compose -f docker-compose.prod.yml up -d
+#      bash scripts/despliegue/verificar-stack.sh
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  #  Proxy inverso — la única puerta de entrada
+  # ---------------------------------------------------------------------------
+  proxy:
+    image: ${REGISTRO:?falta REGISTRO en el archivo .env}/ventas-proxy:${ETIQUETA:?falta ETIQUETA en el archivo .env}
+    container_name: ventas-proxy
+
+    # El único puerto publicado de toda la solución.
+    ports:
+      - "80:80"
+
+    networks: [red-borde]
+
+    restart: unless-stopped
+
+    # El sistema de archivos va en sólo lectura: si alguien lograra ejecutar
+    # código dentro, no podría dejar nada persistente en la imagen. Los dos
+    # únicos directorios escribibles son tmpfs, es decir viven en memoria y
+    # desaparecen con el contenedor.
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+      - /var/cache/nginx:size=16m
+
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 128m
+    cpus: 0.25
+
+    # No se levanta hasta que la aplicación esté sana. Sin esto, el proxy
+    # aceptaría tráfico y devolvería 502 durante el arranque.
+    depends_on:
+      web:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  #  Aplicación .NET — el único puente entre el exterior y los datos
+  # ---------------------------------------------------------------------------
+  web:
+    image: ${REGISTRO}/ventas-web:${ETIQUETA}
+    container_name: ventas-web
+
+    # No publica puerto: sólo es alcanzable desde dentro de las redes de Docker.
+
+    # El único contenedor que pertenece a las dos redes. Esa pertenencia es,
+    # literalmente, el diseño de seguridad: el proxy no alcanza la base y la
+    # base no alcanza el proxy.
+    networks: [red-borde, red-datos]
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+
+      # Le dice a la aplicación que hay un proxy delante: habilita la lectura
+      # de X-Forwarded-* y desactiva la redirección a HTTPS, que en este
+      # contexto apuntaría a una dirección interna inalcanzable.
+      DetrasDeProxy: "true"
+
+      # El servidor se resuelve por el nombre del servicio. La contraseña llega
+      # del archivo .env, que en la máquina virtual escribe la canalización con
+      # permisos restringidos y que está excluido del control de versiones.
+      ConnectionStrings__Tecnica: >-
+        Server=datos,1433;Database=Tecnica;User Id=sa;
+        Password=${MSSQL_SA_PASSWORD:?falta MSSQL_SA_PASSWORD en el archivo .env};
+        TrustServerCertificate=True;Encrypt=False;MultipleActiveResultSets=True
+
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 640m
+    cpus: 0.75
+
+    # La comprobación consulta /salud, que NO toca la base de datos.
+    # Si consultara la base, una caída del motor haría que Docker reiniciara la
+    # aplicación en bucle, cuando la aplicación no tiene ningún problema.
+    # Se usa 127.0.0.1 y no "localhost" por la misma razón que en el proxy: con
+    # el nombre, la resolución intenta IPv6 primero y la comprobación falla con
+    # el servicio sano.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/salud || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+    depends_on:
+      # Dos condiciones distintas y las dos necesarias: el motor tiene que
+      # estar sano Y la inicialización tiene que haber TERMINADO BIEN. Si el
+      # esquema falla, la aplicación no arranca contra una base a medio
+      # construir: el despliegue se detiene acá.
+      datos:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+
+  # ---------------------------------------------------------------------------
+  #  Motor de base de datos — sin ruta hacia Internet
+  # ---------------------------------------------------------------------------
+  datos:
+    # Se consume directamente del registro público de Microsoft. Copiarla al
+    # registro privado agregaría más de dos gigabytes sin aportar nada: no es
+    # una imagen que el equipo modifique.
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ventas-datos
+
+    networks: [red-datos]
+
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: "Developer"
+
+      # Techo interno del motor, y es tan necesario como el del contenedor.
+      # SQL Server toma por omisión toda la memoria que encuentra; sin este
+      # límite chocaría contra los 2048 MB del contenedor y el sistema lo
+      # terminaría por falta de memoria, en lugar de que el motor administre
+      # la suya. Se deja holgura entre los 1536 y los 2048.
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+
+    volumes:
+      - datos-ventas:/var/opt/mssql
+
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 2048m
+    cpus: 1.0
+
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -No -Q 'SELECT 1' || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  #  Inicialización de la base — vida corta
+  # ---------------------------------------------------------------------------
+  #  Aplica el esquema y los datos, y termina. Es la pieza que hace visible la
+  #  independencia de tiempos de ejecución: se ejecuta y muere mientras los
+  #  otros tres siguen corriendo.
+  migraciones:
+    # Reutiliza la imagen del motor, que ya está descargada y trae sqlcmd. No
+    # agrega ni una descarga ni un megabyte al despliegue.
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ventas-migraciones
+
+    networks: [red-datos]
+
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      SQL_SERVIDOR: "datos"
+
+    # Los scripts SQL y el de inicialización son lo único que viaja desde el
+    # repositorio en lugar de venir dentro de una imagen. Van montados en sólo
+    # lectura: el contenedor no tiene por qué poder modificarlos.
+    volumes:
+      - ./sql:/sql:ro
+      - ./docker/inicializacion/aplicar-esquema.sh:/aplicar-esquema.sh:ro
+
+    entrypoint: ["/bin/bash", "/aplicar-esquema.sh"]
+
+    # ESTA es la diferencia de ciclo de vida, y es deliberada. Los servicios
+    # permanentes usan unless-stopped; éste no debe reiniciarse nunca, porque
+    # un proceso que terminó su trabajo correctamente no debe relanzarse. Con
+    # la política de los demás, Docker lo ejecutaría en bucle indefinidamente.
+    restart: "no"
+
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 256m
+    cpus: 0.5
+
+    depends_on:
+      datos:
+        condition: service_healthy
+
+# -----------------------------------------------------------------------------
+#  Redes
+# -----------------------------------------------------------------------------
+#  Reproducen dentro de la máquina la segmentación que la Experiencia 1 resolvió
+#  con dos subredes y dos grupos de seguridad de red. Es el mismo criterio de
+#  mínimo privilegio, una capa más abajo.
+networks:
+
+  red-borde:
+    driver: bridge
+    name: ventas-red-borde
+
+  red-datos:
+    driver: bridge
+    name: ventas-red-datos
+    # internal: true corta el enrutamiento hacia el exterior. El contenedor de
+    # la base de datos no puede iniciar conexiones a Internet ni recibirlas, ni
+    # siquiera si alguien publicara su puerto por error.
+    internal: true
+
+volumes:
+  datos-ventas:
+    name: ventas-datos-volumen

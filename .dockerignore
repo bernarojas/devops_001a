@@ -16,3 +16,10 @@
 *.md
 powerbi/
 docs/
+
+# El proyecto de pruebas se ejecuta en la canalización, no dentro de la imagen.
+tests/
+
+# Los scripts SQL viajan montados desde el repositorio al contenedor de
+# inicialización; no forman parte de ninguna imagen.
+sql/

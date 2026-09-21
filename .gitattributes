@@ -1,0 +1,33 @@
+# =============================================================================
+#  Normalización de fin de línea.
+#
+#  El equipo trabaja en Windows y el destino es Linux. Sin esta declaración,
+#  Git entrega los scripts con CRLF al clonar en Windows y, si ese archivo se
+#  monta dentro de un contenedor, el intérprete falla con un mensaje
+#  desconcertante:  "/bin/bash^M: bad interpreter: No such file or directory".
+#
+#  Es un error que cuesta caro por lo poco que se parece a su causa, así que
+#  los archivos que se ejecutan en Linux se fijan a LF de forma explícita.
+# =============================================================================
+
+# Detección automática para todo lo demás.
+* text=auto
+
+# Se ejecutan dentro de contenedores Linux o en la máquina virtual.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# La configuración de nginx se copia dentro de una imagen Linux.
+*.conf          text eol=lf
+
+# Los scripts de PowerShell se ejecutan en Windows.
+*.ps1           text eol=crlf
+
+# Binarios: Git no debe tocarlos.
+*.pbix          binary
+*.bak           binary
+*.png           binary
+*.jpg           binary
+*.ico           binary

@@ -1,0 +1,112 @@
+# =============================================================================
+#  REVERTIR A UNA VERSIÓN ANTERIOR
+#
+#  Se ejecuta a mano, indicando la etiqueta a la que se quiere volver.
+#
+#  Esta canalización es la demostración práctica de para qué sirve un registro
+#  de contenedores. Volver atrás no reconstruye nada, no recompila nada y no
+#  vuelve a ejecutar las pruebas: descarga una imagen que ya existe, que ya fue
+#  probada en su momento, y la levanta. Es un cambio de etiqueta.
+#
+#  Sin registro, "volver a la versión anterior" significaría revertir el
+#  código, esperar una compilación completa y confiar en que el resultado sea
+#  idéntico al de la vez anterior. Con registro, es un minuto y es exacto.
+# =============================================================================
+
+name: Revertir a una versión anterior
+
+on:
+  workflow_dispatch:
+    inputs:
+      etiqueta:
+        description: >-
+          Número de ejecución de la versión a la que se quiere volver
+          (la etiqueta de las imágenes en el registro, por ejemplo 27).
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Comparte grupo con la entrega continua: una reversión y un despliegue nunca
+# se pisan, se encolan.
+concurrency:
+  group: despliegue-produccion
+  cancel-in-progress: false
+
+jobs:
+
+  revertir:
+    name: Revertir a la etiqueta ${{ inputs.etiqueta }}
+    runs-on: [self-hosted, linux, ventas]
+
+    environment:
+      name: produccion
+      url: http://${{ vars.DIRECCION_PUBLICA }}
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v4
+
+      - name: Autenticarse en Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRO_SERVIDOR }}
+          username: ${{ secrets.REGISTRO_USUARIO }}
+          password: ${{ secrets.REGISTRO_CLAVE }}
+
+      # Se comprueba que la etiqueta exista ANTES de tocar nada en marcha. Un
+      # número equivocado acá dejaría la solución detenida sin nada que
+      # levantar; fallar antes de empezar es mucho mejor que fallar a medias.
+      - name: Comprobar que la etiqueta existe en el registro
+        env:
+          REGISTRO: ${{ secrets.REGISTRO_SERVIDOR }}
+          ETIQUETA: ${{ inputs.etiqueta }}
+        run: |
+          for imagen in ventas-web ventas-proxy; do
+            referencia="${REGISTRO}/${imagen}:${ETIQUETA}"
+            if docker manifest inspect "$referencia" > /dev/null 2>&1; then
+              echo "Encontrada: $referencia"
+            else
+              echo "ERROR: no existe $referencia en el registro." >&2
+              exit 1
+            fi
+          done
+
+      - name: Escribir las variables del despliegue
+        env:
+          REGISTRO: ${{ secrets.REGISTRO_SERVIDOR }}
+          ETIQUETA: ${{ inputs.etiqueta }}
+          MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
+        run: |
+          umask 077
+          {
+            echo "REGISTRO=${REGISTRO}"
+            echo "ETIQUETA=${ETIQUETA}"
+            echo "MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}"
+          } > .env
+
+      - name: Descargar las imágenes de esa versión
+        run: docker compose -f docker-compose.prod.yml pull
+
+      - name: Levantar la versión anterior
+        run: |
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          docker compose -f docker-compose.prod.yml ps
+
+      - name: Verificar la solución desplegada
+        run: bash scripts/despliegue/verificar-stack.sh
+
+      - name: Dejar constancia de la reversión
+        if: always()
+        run: |
+          {
+            echo "### Reversión ejecutada"
+            echo ""
+            echo "- Etiqueta desplegada: \`${{ inputs.etiqueta }}\`"
+            echo "- Solicitada por: @${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cerrar la sesión del registro
+        if: always()
+        run: docker logout ${{ secrets.REGISTRO_SERVIDOR }}

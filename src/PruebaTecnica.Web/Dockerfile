@@ -37,8 +37,14 @@ WORKDIR /app
 # invariante: sin esto, los montos saldrían con formato inglés (38,594,578,526)
 # en lugar del chileno (38.594.578.526).
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+# curl se instala junto con los locales, en la misma capa, porque la
+# comprobación de estado del contenedor necesita un cliente HTTP y la imagen
+# del runtime de ASP.NET no trae ninguno. Son unos dos megabytes; la
+# alternativa —declarar la comprobación y que no exista la herramienta— deja
+# el contenedor marcado como enfermo para siempre.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends locales \
+ && apt-get install -y --no-install-recommends locales curl \
  && sed -i '/es_CL.UTF-8/s/^# //g' /etc/locale.gen \
  && locale-gen \
  && rm -rf /var/lib/apt/lists/*
