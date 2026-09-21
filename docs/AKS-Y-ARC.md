@@ -35,13 +35,24 @@ Para el clúster usa **East US 2**.
 Dos nodos `D2s_v3` son 4 vCPU de la familia Dsv3. Conviene mirarlo antes de
 empezar, porque el error de cuota aparece recién al final de la creación.
 
-Portal → busca **Cuotas** → **Proceso** → filtra por:
+Portal → busca **Cuotas** → primera tarjeta, **Compute**.
+
+> El portal mezcla idiomas: el menú lateral está en español pero estas
+> tarjetas aparecen en inglés. Busca **Compute**, no «Proceso».
+>
+> Tampoco entres por la tarjeta *Azure Kubernetes Service*: esa muestra cuotas
+> propias del servicio, como cuántos clústeres puedes tener. Los núcleos de
+> los nodos se cuentan en **Compute**, porque los nodos son máquinas
+> virtuales.
+
+Dentro, filtra por:
 
 - **Suscripción:** Azure for Students
-- **Región:** `Este de EE. UU. 2`
+- **Región:** `East US 2`
 - En el buscador de la tabla: `DSv3`
 
-Necesitas que el límite de **Standard DSv3 Family vCPUs** sea **4 o más**.
+Necesitas que el límite de **Standard DSv3 Family vCPUs** sea **4 o más**:
+dos nodos de dos núcleos cada uno.
 
 Si es menor, avísame antes de seguir y ajustamos el tamaño de los nodos.
 
