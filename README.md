@@ -8,6 +8,12 @@ Solución para consolidar y visualizar información de ventas mensuales.
 | Proyecto .NET (MVC + Web API) | [`src/PruebaTecnica.Web/`](src/PruebaTecnica.Web/) |
 | Reporte Power BI | [`powerbi/`](powerbi/) |
 | Script de puesta en marcha | [`scripts/setup.ps1`](scripts/setup.ps1) |
+| Pruebas automatizadas | [`tests/PruebaTecnica.Tests/`](tests/PruebaTecnica.Tests/) |
+
+> **Capa DevOps.** La contenerización, el registro de imágenes y las
+> canalizaciones de integración y despliegue continuos —el trabajo de la
+> asignatura ISY2201— están documentados aparte, en
+> [`docs/DEVOPS.md`](docs/DEVOPS.md). Este README cubre la solución en sí.
 
 ---
 
@@ -760,9 +766,15 @@ productos de vuelta en 860, y el producto 803 con su nombre original.
 PruebaTecnica/
 ├── README.md
 ├── PruebaTecnica.sln
+├── docs/
+│   └── DEVOPS.md                    Contenedores, registro y CI/CD (ISY2201)
 ├── scripts/
-│   └── setup.ps1                    Levanta SQL Server, restaura y ejecuta todo
+│   ├── setup.ps1                    Levanta SQL Server, restaura y ejecuta todo
+│   ├── infraestructura/             Aprovisionamiento idempotente en Azure
+│   └── despliegue/                  Verificación y evidencia del despliegue
+├── tests/PruebaTecnica.Tests/       15 pruebas automatizadas
 ├── sql/
+│   ├── 00_base_y_datos_sinteticos.sql  Base y datos deterministas, sin el respaldo
 │   ├── 01_esquema_y_matriz.sql      Puntos 1.1 y 1.2 + controles de validación
 │   ├── 02_analisis_datos.sql        Punto 1.3 (sólo lectura)
 │   └── 03_vista_powerbi.sql         Vista de apoyo para el reporte
