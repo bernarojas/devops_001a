@@ -11,8 +11,8 @@ su propia región, y no toca nada de `rg-devops-001a`.
 
 > ## ⚠️ Lo primero: esto cuesta dinero mientras exista
 >
-> Los dos grupos de nodos son máquinas `D2s_v3` a unos **70 USD al mes cada
-> una**. Con un nodo por grupo son unos **0,19 USD por hora**.
+> Los dos grupos de nodos son máquinas de 2 núcleos a unos **70 USD al mes
+> cada una**. Con un nodo por grupo son unos **0,19 USD por hora**.
 >
 > Una sesión de tres horas cuesta menos de **0,60 USD**. Dejarlo encendido una
 > semana se lleva **32 USD** de tus 100 de crédito.
@@ -32,8 +32,9 @@ Para el clúster usa **East US 2**.
 
 ## Paso 0 — Comprobar que hay cuota
 
-Dos nodos `D2s_v3` son 4 vCPU de la familia Dsv3. Conviene mirarlo antes de
-empezar, porque el error de cuota aparece recién al final de la creación.
+Dos nodos de 2 núcleos son 4 vCPU. Conviene mirarlo antes de empezar, porque
+el error de cuota aparece recién al final de la creación, después de diez
+minutos de espera.
 
 Portal → busca **Cuotas** → primera tarjeta, **Compute**.
 
@@ -49,31 +50,69 @@ Dentro, filtra por:
 
 - **Suscripción:** Azure for Students
 - **Región:** `East US 2`
-- En el buscador de la tabla: `DSv3`
 
-Necesitas que el límite de **Standard DSv3 Family vCPUs** sea **4 o más**:
-dos nodos de dos núcleos cada uno.
+Hay que mirar **dos** filas, y las dos tienen que alcanzar:
+
+1. **vCPU regionales totales** — el techo de toda la región
+2. La familia del tamaño que vayas a usar
+
+Con dos nodos de dos núcleos necesitas **4 o más** en ambas.
 
 ### Lo que se midió en esta suscripción
 
+Hay que mirar **dos** cuotas, y la que manda no es la de la familia:
+
 ```
-Familia DSv3 estándar vCPUs   East US 2   0 de 4   Ajustable: No
+vCPU regionales totales        East US 2   0 de 6    ← el techo real
+Familia DSv3 estándar vCPUs    East US 2   0 de 4
+Familia DASv4 estándar vCPUs   East US 2   0 de 4
+Familia Bsv2 estándar vCPUs    East US 2   0 de 10
 ```
 
-Alcanza, y **justo**. Con el mínimo de un nodo por grupo se ocupan los cuatro
-núcleos disponibles. Si el escalado automático intentara subir a dos nodos en
-cualquiera de los dos grupos harían falta seis, y fallaría por cuota.
+El límite regional de **6 vCPU** manda sobre todos los demás: da igual que una
+familia tenga 10 asignados, la suma de todo lo que se ejecute en la región no
+puede pasar de 6.
 
-Para la demostración no importa: sin carga, el clúster nunca escala. Pero si
-aparece un error de cuota en el registro del clúster, viene de ahí.
+Dos nodos de 2 vCPU son 4. Entra, con dos de margen.
 
-Y como la cuota figura como **no ajustable**, la suscripción de estudiante no
-permite pedir más. Es un techo duro.
+### El tamaño que pide la actividad no está disponible
+
+`D2s_v3` aparece en el selector bajo el encabezado **«Tamaño no disponible»**:
+la suscripción tiene cuota de esa familia, pero el tamaño está restringido en
+East US 2. Son dos condiciones independientes y hay que cumplir las dos.
+
+**Se usa `D2as_v4` en su lugar**, que es el equivalente directo:
+
+| | `D2s_v3` | `D2as_v4` |
+|---|---|---|
+| vCPU | 2 | 2 |
+| RAM | 8 GB | 8 GB |
+| Serie | D, uso general | D, uso general |
+| Procesador | Intel | AMD |
+
+Mismo tamaño y mismo propósito; cambia el fabricante del procesador, y eso no
+afecta a nada porque ambos son x86 y ejecutan las mismas imágenes.
+
+Si `D2as_v4` tampoco estuviera disponible, el siguiente candidato es
+`B2s_v2` (Intel, 2 vCPU, 8 GB, cuota 10).
+
+**Evitar los tamaños con `p`** —`D2ps_v6`, `B2pts_v2`— porque son ARM. Las
+imágenes de la tienda de Microsoft y las de `acrventas` están compiladas para
+x86 y fallarían con `exec format error`.
+
+### Sobre el escalado
+
+Con 6 vCPU regionales, el máximo absoluto son **3 nodos** de 2 vCPU. La
+configuración de la actividad —máximo 2 nodos en cada uno de los dos grupos—
+permitiría llegar a 4 nodos, es decir 8 vCPU.
+
+Sin carga el clúster nunca escala, así que no ocurre. Pero si alguna vez
+apareciera un error de cuota al escalar, viene de ahí.
 
 > Vale la pena decirlo en la presentación, porque refuerza el argumento de
-> proporcionalidad: *«el clúster cabe en la cuota con cero margen, de modo que
-> escalar —la razón principal para adoptar Kubernetes— es justamente lo que
-> esta suscripción no permite demostrar»*.
+> proporcionalidad: *«el clúster cabe en la cuota disponible con muy poco
+> margen, de modo que escalar —la razón principal para adoptar Kubernetes— es
+> justamente lo que esta suscripción no permite demostrar»*.
 
 La máquina `vm-web-01` no consume esta cuota: es de otra familia (`D2ls_v7`) y
 está en otra región.
@@ -131,7 +170,7 @@ Aquí hay dos cosas que hacer.
 
 | Campo | Valor |
 |---|---|
-| Tamaño del nodo | `D2s_v3` (pulsa *Cambiar tamaño* para elegirlo) |
+| Tamaño del nodo | `D2as_v4` (pulsa *Cambiar tamaño* para elegirlo) |
 | Recuento mínimo de nodos | `1` |
 | Recuento máximo de nodos | `2` |
 
@@ -144,7 +183,7 @@ Aquí hay dos cosas que hacer.
 | Nombre del grupo de nodos | `nplinux` |
 | Modo | `Usuario` |
 | Sistema operativo | `Ubuntu Linux` |
-| Tamaño del nodo | `D2s_v3` |
+| Tamaño del nodo | `D2as_v4` |
 | Recuento mínimo de nodos | `1` |
 | Recuento máximo de nodos | `2` |
 
