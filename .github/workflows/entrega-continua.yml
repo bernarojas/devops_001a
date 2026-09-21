@@ -191,7 +191,22 @@ jobs:
       # publicación. Devuelve un código distinto de cero si alguna comprobación
       # falla, y eso marca el despliegue como fallido en lugar de darlo por
       # bueno porque los contenedores "arrancaron".
+      #
+      # "shell: bash" NO es decorativo, y omitirlo costó caro una vez.
+      #
+      # Por omisión, GitHub ejecuta estos bloques con `bash -e`, donde el
+      # código de salida de una tubería es el del ÚLTIMO comando. Con el `tee`
+      # al final, el `1` que devuelve el script cuando una comprobación falla
+      # se perdía y GitHub recibía el `0` de `tee`: el paso salía verde con la
+      # solución rota. Ocurrió de verdad en este proyecto, con el proxy sin
+      # publicar su puerto y catorce comprobaciones que nadie llegó a leer.
+      #
+      # Declarar "shell: bash" hace que GitHub use `bash -eo pipefail`, y con
+      # pipefail la tubería devuelve el error del script aunque `tee` termine
+      # bien. El `tee` se conserva porque la salida tiene que quedar a la vez
+      # en el registro de la ejecución y en el archivo que se adjunta.
       - name: Verificar la solución desplegada
+        shell: bash
         run: bash scripts/despliegue/verificar-stack.sh | tee verificacion.txt
 
       - name: Adjuntar el resultado de la verificación
