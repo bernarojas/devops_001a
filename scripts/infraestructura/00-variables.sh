@@ -41,7 +41,26 @@ IP_PUBLICA="${IP_PUBLICA:-ip-web-publica}"
 # o se elimina según convenga, pero el despliegue de esta experiencia apunta
 # acá. Ver la advertencia sobre la cuota en 30-maquina-virtual.sh.
 MAQUINA="${MAQUINA:-vm-web-02}"
-TAMANO_MAQUINA="${TAMANO_MAQUINA:-Standard_D2s_v3}"
+
+# Standard_B2s son exactamente dos núcleos y 4 GB, que es el tamaño que el
+# informe describe y el que sostiene el argumento de la contenerización: las
+# tres capas juntas ocupan menos de un cuarto de esa memoria.
+#
+# Se prefiere sobre Standard_D2s_v3, que tiene 8 GB y cuesta más del doble.
+TAMANO_MAQUINA="${TAMANO_MAQUINA:-Standard_B2s}"
+
+# Regular o Spot.
+#
+# Spot sale mucho más barato y consume la cuota de prioridad baja en lugar de
+# la normal, pero la familia B NO admite Spot: si se pide Spot hay que cambiar
+# también el tamaño a uno que lo admita, por ejemplo Standard_D2s_v3.
+#
+#     PRIORIDAD=Spot TAMANO_MAQUINA=Standard_D2s_v3 bash aprovisionar.sh
+#
+# Ojo si se toma ese camino: esa máquina tiene 8 GB, no 4, y el informe habla
+# de 4 GB en varios lugares.
+PRIORIDAD="${PRIORIDAD:-Regular}"
+
 IMAGEN_MAQUINA="${IMAGEN_MAQUINA:-Ubuntu2204}"
 USUARIO_ADMIN="${USUARIO_ADMIN:-azureuser}"
 

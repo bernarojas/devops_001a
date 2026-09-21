@@ -5,15 +5,21 @@
 #  Crea la máquina que aloja la solución contenerizada, dentro de la subred de
 #  presentación y detrás de la dirección pública estática.
 #
-#  SOBRE LA PRIORIDAD BAJA (SPOT)
-#  La suscripción Azure for Students tiene la cuota de núcleos en cero para las
-#  familias con capacidad en la región habilitada. La única vía disponible es
-#  la cuota de prioridad baja, que alcanza para una máquina de dos núcleos.
+#  EL TAMAÑO Y POR QUÉ IMPORTA
+#  Standard_B2s: dos núcleos y 4 GB. Es el tamaño que describe el informe, y
+#  es el que sostiene su argumento central: las tres capas contenerizadas
+#  ocupan menos de un cuarto de esa memoria, mientras que tres máquinas
+#  virtuales con tres sistemas operativos completos no habrían cabido.
 #
-#  Lo que eso implica, dicho con precisión: Azure puede desalojar la máquina si
-#  necesita la capacidad. La política de desalojo se fija en Deallocate y no en
-#  Delete, de modo que la máquina se detiene pero conserva su disco y su
-#  configuración, y vuelve a arrancar cuando hay capacidad. La dirección
+#  SI LA CUOTA NO ALCANZA
+#  Azure for Students a veces tiene la cuota de núcleos en cero para las
+#  familias con capacidad en la región habilitada. En ese caso queda la cuota
+#  de prioridad baja (Spot), que se activa con PRIORIDAD=Spot. La familia B no
+#  admite Spot, así que hay que cambiar también el tamaño.
+#
+#  Con Spot, Azure puede desalojar la máquina si necesita la capacidad. La
+#  política de desalojo se fija en Deallocate y no en Delete, de modo que la
+#  máquina se detiene pero conserva su disco y su configuración. La dirección
 #  pública es estática justamente por esto: sin eso, cada desalojo cambiaría la
 #  dirección del sitio.
 #
@@ -62,32 +68,37 @@ else
         echo ""
     fi
 
-    paso "Creando $MAQUINA ($TAMANO_MAQUINA, prioridad baja) en $SUBRED_WEB..."
+    paso "Creando $MAQUINA ($TAMANO_MAQUINA, prioridad $PRIORIDAD) en $SUBRED_WEB..."
 
     # --nsg "" es deliberado: la seguridad de red está definida A NIVEL DE
     # SUBRED. Si se creara además un grupo de seguridad por interfaz, habría
     # dos conjuntos de reglas que mantener sincronizados y el diagnóstico de
     # "por qué no pasa este tráfico" se volvería el doble de difícil.
-    #
-    # --max-price -1 significa "pagar hasta el precio bajo demanda", que es lo
-    # que evita el desalojo por precio: sólo queda el desalojo por capacidad.
-    if az vm create \
-            --resource-group "$GRUPO_RECURSOS" \
-            --name "$MAQUINA" \
-            --location "$REGION" \
-            --image "$IMAGEN_MAQUINA" \
-            --size "$TAMANO_MAQUINA" \
-            --admin-username "$USUARIO_ADMIN" \
-            --generate-ssh-keys \
-            --vnet-name "$RED_VIRTUAL" \
-            --subnet "$SUBRED_WEB" \
-            --public-ip-address "$IP_PUBLICA" \
-            --nsg "" \
-            --priority Spot \
-            --max-price -1 \
-            --eviction-policy Deallocate \
-            --os-disk-size-gb 64 \
-            --output none; then
+    opciones=(
+        --resource-group "$GRUPO_RECURSOS"
+        --name            "$MAQUINA"
+        --location        "$REGION"
+        --image           "$IMAGEN_MAQUINA"
+        --size            "$TAMANO_MAQUINA"
+        --admin-username  "$USUARIO_ADMIN"
+        --generate-ssh-keys
+        --vnet-name       "$RED_VIRTUAL"
+        --subnet          "$SUBRED_WEB"
+        --public-ip-address "$IP_PUBLICA"
+        --nsg             ""
+        --os-disk-size-gb 64
+        --output          none
+    )
+
+    if [[ "$PRIORIDAD" == "Spot" ]]; then
+        # --max-price -1 significa "pagar hasta el precio bajo demanda", que es
+        # lo que evita el desalojo por precio: sólo queda el desalojo por
+        # capacidad. La política Deallocate conserva el disco, así que la
+        # máquina vuelve tal como estaba cuando haya capacidad de nuevo.
+        opciones+=(--priority Spot --max-price -1 --eviction-policy Deallocate)
+    fi
+
+    if az vm create "${opciones[@]}"; then
         listo "Máquina $MAQUINA creada."
     else
         error "No se pudo crear la máquina virtual."
@@ -97,9 +108,15 @@ else
         error "    az vm list-usage --location $REGION --output table"
         error ""
         error "Las salidas posibles, en orden de menor a mayor esfuerzo:"
-        error "  1. Eliminar la máquina de la experiencia anterior."
-        error "  2. Probar otro tamaño:  TAMANO_MAQUINA=Standard_B2s bash $0"
-        error "  3. Probar otra región:  REGION=eastus2 bash $0"
+        error "  1. Probar otra región:"
+        error "       REGION=eastus2 bash $0"
+        error "  2. Usar la cuota de prioridad baja, que suele estar libre"
+        error "     cuando la normal está en cero. Ojo: la familia B no admite"
+        error "     Spot, así que hay que cambiar también el tamaño, y esa"
+        error "     máquina tiene 8 GB en lugar de 4:"
+        error "       PRIORIDAD=Spot TAMANO_MAQUINA=Standard_D2s_v3 bash $0"
+        error "  3. Si ya existe una máquina de una experiencia anterior,"
+        error "     eliminarla para liberar su cuota."
         exit 1
     fi
 fi
@@ -113,7 +130,7 @@ DIRECCION=$(az network public-ip show \
                 --query ipAddress --output tsv)
 
 titulo "Máquina virtual lista"
-echo "  Nombre    : $MAQUINA ($TAMANO_MAQUINA, prioridad baja)"
+echo "  Nombre    : $MAQUINA ($TAMANO_MAQUINA, prioridad $PRIORIDAD)"
 echo "  Subred    : $SUBRED_WEB"
 echo "  Direccion : $DIRECCION"
 echo ""

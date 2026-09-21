@@ -251,6 +251,10 @@ buena parte del trabajo de segmentación de la Experiencia 1.
 
 ## 6. Puesta en marcha desde cero
 
+> Esta sección es el resumen técnico. Para seguirlo paso a paso, con los
+> comandos exactos, qué esperar en cada uno y qué hacer cuando algo falla,
+> está [PUESTA-EN-MARCHA.md](PUESTA-EN-MARCHA.md).
+
 ### 6.1 Infraestructura
 
 ```bash
