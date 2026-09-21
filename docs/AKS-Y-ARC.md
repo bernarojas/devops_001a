@@ -54,7 +54,29 @@ Dentro, filtra por:
 Necesitas que el límite de **Standard DSv3 Family vCPUs** sea **4 o más**:
 dos nodos de dos núcleos cada uno.
 
-Si es menor, avísame antes de seguir y ajustamos el tamaño de los nodos.
+### Lo que se midió en esta suscripción
+
+```
+Familia DSv3 estándar vCPUs   East US 2   0 de 4   Ajustable: No
+```
+
+Alcanza, y **justo**. Con el mínimo de un nodo por grupo se ocupan los cuatro
+núcleos disponibles. Si el escalado automático intentara subir a dos nodos en
+cualquiera de los dos grupos harían falta seis, y fallaría por cuota.
+
+Para la demostración no importa: sin carga, el clúster nunca escala. Pero si
+aparece un error de cuota en el registro del clúster, viene de ahí.
+
+Y como la cuota figura como **no ajustable**, la suscripción de estudiante no
+permite pedir más. Es un techo duro.
+
+> Vale la pena decirlo en la presentación, porque refuerza el argumento de
+> proporcionalidad: *«el clúster cabe en la cuota con cero margen, de modo que
+> escalar —la razón principal para adoptar Kubernetes— es justamente lo que
+> esta suscripción no permite demostrar»*.
+
+La máquina `vm-web-01` no consume esta cuota: es de otra familia (`D2ls_v7`) y
+está en otra región.
 
 ---
 
