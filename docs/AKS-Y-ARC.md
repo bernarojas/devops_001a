@@ -9,6 +9,23 @@ su propia región, y no toca nada de `rg-devops-001a`.
 
 ---
 
+> ## ⛔ Estado: no se pudo ejecutar en esta suscripción
+>
+> **La suscripción Azure for Students del proyecto no permite crear el
+> clúster.** El diagnóstico completo está en el apartado *Por qué no fue
+> posible*, al final de este documento, y resumido en la sección 3.10 del
+> informe.
+>
+> En una palabra: de los siete tamaños de dos núcleos disponibles en la única
+> región elegible, los siete tienen cuota cero, y las once solicitudes de
+> aumento fueron rechazadas.
+>
+> **El resto de la guía se conserva y es correcta** para cualquier suscripción
+> sin esas restricciones. Si la cuota llega a otorgarse, o se dispone de otra
+> suscripción, los pasos funcionan tal como están escritos.
+
+---
+
 > ## ⚠️ Lo primero: esto cuesta dinero mientras exista
 >
 > Los dos grupos de nodos son máquinas de 2 núcleos a unos **70 USD al mes
@@ -75,30 +92,25 @@ puede pasar de 6.
 
 Dos nodos de 2 vCPU son 4. Entra, con dos de margen.
 
-### El tamaño que pide la actividad no está disponible
+### Cómo elegir el tamaño
 
-`D2s_v3` aparece en el selector bajo el encabezado **«Tamaño no disponible»**:
-la suscripción tiene cuota de esa familia, pero el tamaño está restringido en
-East US 2. Son dos condiciones independientes y hay que cumplir las dos.
+Un tamaño sirve sólo si cumple **tres** condiciones a la vez, y el portal
+informa de cada una en un lugar distinto:
 
-**Se usa `D2as_v4` en su lugar**, que es el equivalente directo:
+| Condición | Dónde se comprueba |
+|---|---|
+| La región es elegible para AKS | Desplegable *Región* del formulario |
+| El tamaño está habilitado para la suscripción | Selector de tamaños: fuera del grupo «Tamaño no disponible» |
+| Hay cuota en su familia | Pantalla de *Cuotas*, y el aviso de «núcleos restantes» del formulario |
 
-| | `D2s_v3` | `D2as_v4` |
-|---|---|---|
-| vCPU | 2 | 2 |
-| RAM | 8 GB | 8 GB |
-| Serie | D, uso general | D, uso general |
-| Procesador | Intel | AMD |
+El camino rápido para verlas juntas: en el selector de tamaños, aplica el
+filtro **vCPU : 2**. Quedan a la vista todos los candidatos posibles de la
+región, agrupados por disponibilidad. Después se cruza cada uno con la cuota
+de su familia.
 
-Mismo tamaño y mismo propósito; cambia el fabricante del procesador, y eso no
-afecta a nada porque ambos son x86 y ejecutan las mismas imágenes.
-
-Si `D2as_v4` tampoco estuviera disponible, el siguiente candidato es
-`B2s_v2` (Intel, 2 vCPU, 8 GB, cuota 10).
-
-**Evitar los tamaños con `p`** —`D2ps_v6`, `B2pts_v2`— porque son ARM. Las
-imágenes de la tienda de Microsoft y las de `acrventas` están compiladas para
-x86 y fallarían con `exec format error`.
+**Evitar los tamaños con `p` en el nombre** —`D2ps_v6`, `B2pts_v2`— porque son
+ARM. Las imágenes de la tienda de Microsoft y las de `acrventas` están
+compiladas para x86 y fallarían con `exec format error`.
 
 ### Sobre el escalado
 
@@ -170,7 +182,7 @@ Aquí hay dos cosas que hacer.
 
 | Campo | Valor |
 |---|---|
-| Tamaño del nodo | `D2as_v4` (pulsa *Cambiar tamaño* para elegirlo) |
+| Tamaño del nodo | uno que cumpla las tres condiciones de arriba |
 | Recuento mínimo de nodos | `1` |
 | Recuento máximo de nodos | `2` |
 
@@ -497,3 +509,61 @@ esta estructura:
 
 Esa secuencia es criterio técnico demostrado, que es exactamente lo que la
 pauta puntúa.
+
+---
+
+## Por qué no fue posible en esta suscripción
+
+Se deja registrado porque el diagnóstico tiene valor propio, y porque distingue
+tres controles que se confunden con facilidad.
+
+### Elegibilidad regional
+
+El desplegable de regiones del formulario de AKS marca **todas las regiones
+como «No apto» salvo West US 3**. East US 2, la región que indica la actividad,
+no es elegible para este servicio en esta suscripción.
+
+### Disponibilidad del tamaño
+
+Filtrando el selector por **vCPU : 2** en West US 3 quedan siete tamaños
+disponibles:
+
+| Tamaño | RAM | Familia |
+|---|---|---|
+| `D2ds_v7` | 8 GB | Ddsv7 |
+| `D2lds_v7` | 4 GB | Dldsv7 |
+| `D2ls_v7` | 4 GB | Dlsv7 |
+| `D2s_v7` | 8 GB | Dsv7 |
+| `E2ds_v7` | 16 GB | Edsv7 |
+| `E2s_v7` | 16 GB | Esv7 |
+| `M8-2ms` | 218 GB | MS |
+
+En East US 2 no hay ninguno: se comprobaron `D2s_v3`, `D2as_v4`, `DS2_v2`,
+`D2_v2` y toda la familia B, y todos devuelven `NotAvailableForSubscription`
+—incluido el que el propio formulario propone por omisión.
+
+### Cuota
+
+**Las siete familias de la tabla anterior tienen cuota cero.** El formulario lo
+confirma con el aviso «núcleos restantes: 0», que persiste incluso fijando el
+máximo de nodos en 1.
+
+El caso inverso también se da: `Standard_DS2_v2`, el tamaño que usa el material
+del curso, **sí tiene cuota** —cuatro núcleos en West US 3— pero el tamaño está
+deshabilitado. Cuota y disponibilidad son controles independientes.
+
+### Solicitud de aumento
+
+Se solicitó aumento a 8 vCPU para las once familias ajustables de la región.
+**Las once solicitudes fueron rechazadas** por el mecanismo de autoservicio:
+`Correcto: 0 · Incorrecto: 11`. La suscripción remite a un caso de soporte
+técnico, que Azure for Students no tramita.
+
+### Conclusión
+
+No existe ninguna combinación de región, tamaño y cuota que permita crear un
+clúster de AKS en esta suscripción. No es un problema de configuración.
+
+La clasificación de herramientas de orquestación del informe se sostiene sobre
+el análisis comparativo y sobre la experiencia práctica con Docker Compose,
+que sí está desplegado y verificado.
