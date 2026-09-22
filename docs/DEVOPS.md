@@ -3,38 +3,47 @@
 Documentación de la infraestructura y el ciclo de entrega de la solución de
 ventas. La aplicación en sí está documentada en el [README](../README.md).
 
-El ciclo completo vive en **GitHub** (código y canalizaciones) y se despliega
-sobre **Microsoft Azure** (registro de contenedores y máquina virtual).
+El **código y los archivos de canalización** viven en **GitHub**. El motor que
+los ejecuta es **Azure Pipelines**, y el destino es **Microsoft Azure**: el
+registro de contenedores y la máquina virtual.
 
 ---
 
 ## 1. El recorrido de un cambio
 
 ```
-  commit en una rama
+  commit en una rama  ──►  GitHub
         │
+        │  (Azure Pipelines lee el YAML desde GitHub)
         ▼
-  GitHub · Integración continua          .github/workflows/integracion-continua.yml
+  Azure Pipelines · Integración continua    azure-pipelines-integracion-continua.yml
         restaura, compila, 15 pruebas
         construye las 2 imágenes (sin publicar)
         valida la orquestación y los scripts
         │
         ▼  (al integrar en main)
-  GitHub · Entrega continua              .github/workflows/entrega-continua.yml
+  Azure Pipelines · Entrega continua        azure-pipelines-entrega-continua.yml
         vuelve a compilar y probar
         construye y publica las 2 imágenes
         │
         ▼
   Azure Container Registry
-        ventas-web:<n.º de ejecución>   + latest
-        ventas-proxy:<n.º de ejecución> + latest
+        ventas-web:<n.º de compilación>   + latest
+        ventas-proxy:<n.º de compilación> + latest
         │
-        ▼  (agente autoalojado, dentro de la máquina)
+        ▼  (agente del entorno, dentro de la máquina)
   Máquina virtual · despliegue
         descarga las imágenes de esa etiqueta
         orquesta con Docker Compose
         ejecuta las 14 comprobaciones
 ```
+
+> **Por qué el código está en GitHub y la canalización se ejecuta en Azure
+> Pipelines.** Son dos roles distintos: GitHub aporta el control de versiones y
+> la revisión de cambios; Azure Pipelines aporta el motor de ejecución y la
+> integración nativa con el registro de contenedores y con la máquina virtual,
+> mediante conexiones de servicio y entornos. La canalización es un archivo más
+> del repositorio, versionado junto al código que construye.
 
 La máquina virtual **no compila**: no tiene el SDK, ni el código fuente, ni
 las dependencias de compilación. Sólo descarga y ejecuta. Es lo que garantiza
@@ -131,8 +140,8 @@ Las imágenes se centralizan en **Azure Container Registry**, nivel Basic.
 
 | Repositorio | Contenido | Etiquetas |
 |---|---|---|
-| `ventas-web` | Aplicación .NET 9 (MVC + API), construida en dos etapas | n.º de ejecución y `latest` |
-| `ventas-proxy` | nginx con la configuración del proyecto ya incorporada | n.º de ejecución y `latest` |
+| `ventas-web` | Aplicación .NET 9 (MVC + API), construida en dos etapas | n.º de compilación y `latest` |
+| `ventas-proxy` | nginx con la configuración del proyecto ya incorporada | n.º de compilación y `latest` |
 
 La imagen del motor **no se republica**: se consume del registro público de
 Microsoft. Copiarla agregaría más de dos gigabytes sin aportar nada, porque no
@@ -154,7 +163,7 @@ distintas, y no habría forma de saberlo.
   (`org.opencontainers.image.revision`).
 - **Reversión inmediata.** Volver atrás es desplegar otra etiqueta, no
   reconstruir nada. Está automatizado en
-  [`revertir-version.yml`](../.github/workflows/revertir-version.yml).
+  [`azure-pipelines-revertir-version.yml`](../azure-pipelines-revertir-version.yml).
 - **La máquina deja de compilar.** Sobre dos núcleos, compilar competiría por
   los recursos con el servicio en producción.
 - **Un solo origen para varios destinos.** El mismo registro puede alimentar
@@ -197,8 +206,7 @@ Dos aclaraciones que conviene no saltarse:
 
 - **Azure Container Instances ejecuta contenedores pero no los orquesta**: no
   tiene escalado por métricas ni actualización progresiva.
-- **GitHub Actions y Azure Pipelines tampoco son orquestadores de
-  contenedores.** Orquestan el *despliegue*: deciden cuándo se construye una
+- **Azure Pipelines tampoco es un orquestador de contenedores.** Orquestan el *despliegue*: deciden cuándo se construye una
   imagen, cuándo se publica y cuándo se le pide al orquestador del destino que
   la ponga en ejecución. Son planos distintos y conviven en este proyecto.
 
@@ -226,26 +234,35 @@ proyecto creciera a decenas de servicios, **AKS**.
 
 | Archivo | Cuándo se ejecuta | Qué hace |
 |---|---|---|
-| [`compilar-y-probar.yml`](../.github/workflows/compilar-y-probar.yml) | invocado por las otras dos | Restaura, compila y ejecuta las 15 pruebas |
-| [`integracion-continua.yml`](../.github/workflows/integracion-continua.yml) | solicitudes de cambios y ramas de trabajo | Pruebas, construcción de imágenes sin publicar, validación de la orquestación y `shellcheck` |
-| [`entrega-continua.yml`](../.github/workflows/entrega-continua.yml) | al integrar en `main` | Pruebas, publicación en el registro y despliegue verificado |
-| [`revertir-version.yml`](../.github/workflows/revertir-version.yml) | a mano, indicando una etiqueta | Despliega una versión anterior sin reconstruir nada |
+| [`plantilla-compilar-y-probar.yml`](../pipelines/plantilla-compilar-y-probar.yml) | incluida por las otras dos | Restaura, compila y ejecuta las 15 pruebas |
+| [`azure-pipelines-integracion-continua.yml`](../azure-pipelines-integracion-continua.yml) | solicitudes de cambios y ramas de trabajo | Pruebas, construcción de imágenes sin publicar, validación de la orquestación y `shellcheck` |
+| [`azure-pipelines-entrega-continua.yml`](../azure-pipelines-entrega-continua.yml) | al integrar en `main` | Pruebas, publicación en el registro y despliegue verificado |
+| [`azure-pipelines-revertir-version.yml`](../azure-pipelines-revertir-version.yml) | a mano, indicando una etiqueta | Despliega una versión anterior sin reconstruir nada |
 
-La compilación y las pruebas viven en **un flujo reutilizable** que las otras
-dos invocan. La alternativa —copiar los pasos— deja dos copias que se separan
-con el tiempo, y la que se queda atrás suele ser la de despliegue: se termina
-publicando sin haber ejecutado las pruebas.
+La compilación y las pruebas viven en **una plantilla reutilizable** que las
+otras dos incluyen. La alternativa —copiar los pasos— deja dos copias que se
+separan con el tiempo, y la que se queda atrás suele ser la de despliegue: se
+termina publicando sin haber ejecutado las pruebas.
 
-### Por qué un agente autoalojado
+La configuración del lado de Azure DevOps —conexiones de servicio, entorno y
+creación de las canalizaciones— está en
+[AZURE-PIPELINES.md](AZURE-PIPELINES.md).
+
+### Por qué un entorno con recurso de máquina virtual
 
 El despliegue corre en un agente instalado **dentro de la máquina virtual**,
-que se conecta **de salida** hacia GitHub. No hace falta abrir ningún puerto
+registrado como recurso de un entorno de Azure Pipelines. Ese agente se conecta
+**de salida** hacia Azure DevOps, de modo que no hace falta abrir ningún puerto
 de administración hacia Internet.
 
-La alternativa —desplegar por SSH desde un agente alojado por GitHub—
-obligaría a autorizar en el grupo de seguridad de red los rangos de
-direcciones de GitHub, que son amplios y cambian con el tiempo. Eso desharía
-buena parte del trabajo de segmentación de la Experiencia 1.
+La alternativa —desplegar por SSH desde un agente alojado por Microsoft—
+obligaría a autorizar en el grupo de seguridad de red los rangos de direcciones
+de Azure DevOps, que son amplios y cambian con el tiempo. Eso desharía buena
+parte del trabajo de segmentación de la Experiencia 1.
+
+El entorno aporta además dos cosas que un despliegue suelto no da: el historial
+de qué versión se desplegó y cuándo, y la posibilidad de exigir aprobación
+manual antes de publicar.
 
 ---
 
@@ -273,37 +290,29 @@ Todo se parametriza por entorno, sin editar archivos:
 REGION=eastus2 REGISTRO_NOMBRE=acrventasgrupo14 bash scripts/infraestructura/aprovisionar.sh
 ```
 
-### 6.2 Secretos y variables del repositorio
+### 6.2 Configuración en Azure DevOps
 
-En **Settings → Secrets and variables → Actions**:
+Dos conexiones de servicio, un entorno y una variable secreta. El
+procedimiento completo, con cada campo, está en
+[AZURE-PIPELINES.md](AZURE-PIPELINES.md):
 
-| Secreto | Valor |
-|---|---|
-| `REGISTRO_SERVIDOR` | servidor del registro, p. ej. `acrventas.azurecr.io` |
-| `REGISTRO_USUARIO` | usuario administrador del registro |
-| `REGISTRO_CLAVE` | contraseña del registro |
-| `MSSQL_SA_PASSWORD` | contraseña del usuario `sa` |
+| Qué | Nombre | Para qué |
+|---|---|---|
+| Conexión de servicio a GitHub | `github-devops001a` | Leer el repositorio y el archivo YAML |
+| Conexión de servicio al registro | `acrventas-conexion` | Publicar las imágenes sin escribir credenciales |
+| Entorno con recurso de máquina virtual | `produccion` / `vm-web-01` | Destino del despliegue |
+| Variable secreta | `MSSQL_SA_PASSWORD` | Contraseña del motor de base de datos |
 
-| Variable | Valor |
-|---|---|
-| `DIRECCION_PUBLICA` | dirección pública de la máquina virtual |
+**No hay credenciales del registro en ninguna variable.** Las aporta la
+conexión de servicio, que Azure administra y no expone en los registros de
+ejecución.
 
-Los tres primeros los imprime `20-registro.sh` al terminar.
+### 6.3 Preparar la máquina
 
-### 6.3 Agente de GitHub en la máquina
-
-El token de registro se obtiene en **Settings → Actions → Runners → New
-self-hosted runner** y caduca en una hora.
-
-```bash
-bash scripts/infraestructura/40-preparar-maquina.sh \
-     --repo bernarojas/devops_001a \
-     --token AXXXXXXXXXXXXXXXXXXXXXXXXXX
-```
-
-Instala Docker, ajusta los límites del sistema que SQL Server necesita y
-registra el agente como servicio con las etiquetas `self-hosted, linux,
-ventas`.
+Docker y los límites del sistema que SQL Server necesita se instalan con el
+script de infraestructura. El agente del entorno se registra aparte, con el
+comando que entrega el propio portal al crear el recurso de máquina virtual;
+está en [AZURE-PIPELINES.md](AZURE-PIPELINES.md), paso 3.
 
 ### 6.4 Desplegar
 
@@ -371,11 +380,11 @@ repositorio sin exponer datos de terceros.
 ## 10. Archivos
 
 ```
-.github/workflows/
-├── compilar-y-probar.yml         Flujo reutilizable: restaura, compila, prueba
-├── integracion-continua.yml      Solicitudes de cambios y ramas de trabajo
-├── entrega-continua.yml          Publicación en el registro y despliegue
-└── revertir-version.yml          Reversión a una etiqueta anterior
+azure-pipelines-integracion-continua.yml   Solicitudes de cambios y ramas
+azure-pipelines-entrega-continua.yml       Publicación en el registro y despliegue
+azure-pipelines-revertir-version.yml       Reversión a una etiqueta anterior
+pipelines/
+└── plantilla-compilar-y-probar.yml       Restaura, compila y prueba
 
 docker/
 ├── proxy/
@@ -390,7 +399,7 @@ scripts/
 │   ├── 10-red.sh                 Red, subredes, grupos de seguridad, IP
 │   ├── 20-registro.sh            Azure Container Registry
 │   ├── 30-maquina-virtual.sh     Máquina virtual de prioridad baja
-│   ├── 40-preparar-maquina.sh    Docker y agente de GitHub
+│   ├── 40-preparar-maquina.sh    Docker y límites del sistema
 │   └── aprovisionar.sh           Ejecuta todo en orden
 └── despliegue/
     ├── verificar-stack.sh        14 comprobaciones

@@ -1,0 +1,64 @@
+# =============================================================================
+#  COMPILAR Y PROBAR  (plantilla reutilizable)
+#
+#  No es una canalización: es un conjunto de pasos que otras incluyen con
+#  `template`. La invocan tanto la de integración continua como la de entrega.
+#
+#  POR QUÉ ESTÁ EN UN ARCHIVO APARTE
+#  Porque la alternativa es copiar los mismos pasos en las dos canalizaciones,
+#  y dos copias se separan con el tiempo. La que se queda atrás suele ser la de
+#  despliegue, con lo cual se termina publicando sin haber ejecutado las
+#  pruebas que la otra sí ejecuta. Teniéndolo una sola vez, eso no puede pasar.
+# =============================================================================
+
+parameters:
+  - name: configuracion
+    type: string
+    default: Release
+
+steps:
+
+  # El agente alojado por Microsoft no trae el SDK de .NET 9 preinstalado, así
+  # que se instala explícitamente. Fijar la versión evita además que una
+  # actualización del agente cambie con qué se compila sin avisar.
+  - task: UseDotNet@2
+    displayName: 'Instalar el SDK de .NET 9'
+    inputs:
+      packageType: sdk
+      version: '9.0.x'
+
+  # La caché de NuGet se apoya en el hash de los archivos de proyecto: sólo se
+  # invalida cuando cambia alguna dependencia, no en cada commit.
+  - task: Cache@2
+    displayName: 'Restaurar la caché de NuGet'
+    inputs:
+      key: 'nuget | "$(Agent.OS)" | **/*.csproj'
+      restoreKeys: 'nuget | "$(Agent.OS)"'
+      path: '$(NUGET_PACKAGES)'
+
+  - script: dotnet restore PruebaTecnica.sln
+    displayName: 'Restaurar dependencias'
+
+  # --no-restore y --no-build en los pasos siguientes: cada cosa se hace una
+  # sola vez y queda claro en qué paso exacto falla.
+  - script: dotnet build PruebaTecnica.sln --configuration ${{ parameters.configuracion }} --no-restore
+    displayName: 'Compilar'
+
+  - script: |
+      dotnet test PruebaTecnica.sln \
+        --configuration ${{ parameters.configuracion }} \
+        --no-build \
+        --logger "trx;LogFileName=resultados.trx" \
+        --results-directory $(Agent.TempDirectory)/resultados
+    displayName: 'Ejecutar las pruebas'
+
+  # condition: always() para que el informe se publique también cuando las
+  # pruebas fallan, que es justamente cuando hace falta leerlo.
+  - task: PublishTestResults@2
+    displayName: 'Publicar los resultados de las pruebas'
+    condition: always()
+    inputs:
+      testResultsFormat: VSTest
+      testResultsFiles: '**/*.trx'
+      searchFolder: '$(Agent.TempDirectory)/resultados'
+      failTaskOnFailedTests: true

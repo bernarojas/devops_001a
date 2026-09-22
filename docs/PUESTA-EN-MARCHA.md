@@ -410,34 +410,7 @@ aparece en la pantalla de información general.
 
 ---
 
-## Paso 8 — Secretos y variable en GitHub
-
-Ve a tu repositorio en el navegador:
-**Settings → Secrets and variables → Actions**
-
-En la pestaña **Secrets**, botón **New repository secret**, crea estos cuatro.
-Los nombres se escriben **exactamente así**:
-
-| Nombre | Valor |
-|---|---|
-| `REGISTRO_SERVIDOR` | del paso 6 |
-| `REGISTRO_USUARIO` | del paso 6 |
-| `REGISTRO_CLAVE` | del paso 6 |
-| `MSSQL_SA_PASSWORD` | una contraseña que inventes (ver abajo) |
-
-La contraseña de la base de datos necesita **al menos 8 caracteres, con
-mayúsculas, minúsculas, números y algún símbolo**. Por ejemplo
-`Ventas#2026!Duoc`. Anótala.
-
-Cambia a la pestaña **Variables** → **New repository variable**:
-
-| Nombre | Valor |
-|---|---|
-| `DIRECCION_PUBLICA` | la dirección IP del paso 7 |
-
----
-
-## Paso 9 — Subir el código a GitHub
+## Paso 8 — Subir el código a GitHub
 
 En Git Bash, desde la carpeta del proyecto:
 
@@ -445,105 +418,73 @@ En Git Bash, desde la carpeta del proyecto:
 git push origin main
 ```
 
-Ve a la pestaña **Actions** del repositorio. Vas a ver la ejecución *Entrega
-continua*:
-
-- **Compilación y pruebas** — pasa en unos 2 minutos.
-- **Publicar las imágenes en el registro** — unos 4 minutos.
-- **Desplegar en la máquina virtual** — se queda en **Queued**.
-
-Que se quede en cola es lo esperado: todavía no existe el agente que la
-ejecute. Eso es el paso siguiente, y cuando termines, este trabajo arranca
-solo.
+El repositorio queda con el código, los archivos de canalización y los scripts.
 
 ---
 
-## Paso 10 — Preparar la máquina virtual
+## Paso 9 — Preparar la máquina virtual
 
-Esta parte no se puede hacer con clics: instalar software dentro de la máquina
-necesita una terminal.
-
-### 10.1 Consigue el token del agente
-
-En GitHub: **Settings → Actions → Runners → New self-hosted runner** → elige
-**Linux**.
-
-En la página aparece un comando largo con `--token` seguido de un código.
-Copia **solo ese código** (empieza con A, unos 29 caracteres).
-
-**Caduca en una hora**, así que hazlo justo antes del paso siguiente.
-
-### 10.2 Entra por SSH
-
-En Git Bash:
+Instalar Docker y los límites del sistema que SQL Server necesita. Entra por
+SSH:
 
 ```bash
-chmod 600 /c/Users/Dev/.ssh/vm-web-01_key.pem
-ssh -i /c/Users/Dev/.ssh/vm-web-01_key.pem azureuser@LA-DIRECCION-IP
+chmod 600 /c/Users/Dev/.ssh/vm-web-01
+ssh -i /c/Users/Dev/.ssh/vm-web-01 azureuser@LA-DIRECCION-IP
 ```
 
-La primera vez pregunta si confías en la máquina: escribe `yes`.
-
-Si se queda colgado sin conectar, la regla de SSH del paso 3 tiene tu IP mal,
-o tu IP cambió. Vuelve a <https://ifconfig.me> y corrige la regla.
-
-### 10.3 Ejecuta la preparación
-
-Ya **dentro** de la máquina (el prompt dice `azureuser@vm-web-01`):
+Y ya dentro:
 
 ```bash
 git clone https://github.com/bernarojas/devops_001a.git
 cd devops_001a
-bash scripts/infraestructura/preparar-maquina-desde-dentro.sh \
-     --repo bernarojas/devops_001a \
-     --token PEGA_AQUI_EL_TOKEN
+bash scripts/infraestructura/preparar-maquina-desde-dentro.sh
 ```
 
-Tarda unos 3 minutos. Instala Docker, ajusta los límites que SQL Server
-necesita y registra el agente como servicio.
-
-### 10.4 Sal y vuelve a entrar
-
-Es necesario: el permiso para usar Docker solo se aplica al abrir sesión de
-nuevo.
+Al terminar, **sal y vuelve a entrar**: el permiso para usar Docker sólo se
+aplica al abrir sesión de nuevo.
 
 ```bash
 exit
 ```
 
-Comprueba en **Settings → Actions → Runners** que aparece `vm-ventas` con un
-punto verde y la palabra **Idle**.
+> Si el SSH se queda colgado sin conectar, la regla `permitir-ssh-administracion`
+> del paso 3 tiene una dirección distinta de la tuya. Comprueba la tuya en
+> <https://ifconfig.me> y corrígela.
 
 ---
 
-## Paso 11 — El despliegue arranca solo
+## Paso 10 — Configurar Azure Pipelines
 
-En cuanto el agente queda en *Idle*, el trabajo que estaba en cola empieza a
-ejecutarse. Ve a **Actions** y míralo.
+Las conexiones de servicio, el entorno con la máquina y la creación de las tres
+canalizaciones están en su propia guía, con cada campo:
 
-La primera vez tarda entre 8 y 12 minutos, porque la máquina descarga la
-imagen de SQL Server, que pesa 2,3 GB.
+**[AZURE-PIPELINES.md](AZURE-PIPELINES.md)**
 
-Cuando termine en verde, abre en el navegador:
+En resumen, lo que se configura allí:
+
+| Qué | Nombre |
+|---|---|
+| Conexión de servicio a GitHub | `github-devops001a` |
+| Conexión de servicio al registro | `acrventas-conexion` |
+| Entorno con recurso de máquina virtual | `produccion` / `vm-web-01` |
+| Variable secreta | `MSSQL_SA_PASSWORD` |
+
+---
+
+## Paso 11 — Desplegar y comprobar
+
+Lanza la canalización **Entrega continua** desde Azure DevOps. Verás las tres
+etapas: compilación y pruebas, publicación de las imágenes y despliegue.
+
+Cuando termine, abre en el navegador:
 
 ```
 http://LA-DIRECCION-IP
 ```
 
-Deberías ver la misma aplicación que ya viste en local, ahora servida desde
-Azure.
-
-Para ver las catorce comprobaciones: entra a la ejecución en **Actions** →
-trabajo *Desplegar en la máquina virtual* → paso *Verificar la solución
-desplegada*. **Esa pantalla es una buena captura para el anexo B del
-informe.**
-
-### Si el despliegue falla por permisos de Docker
-
-Es el fallo más común y se arregla reiniciando la máquina: portal →
-`vm-web-01` → **Reiniciar**. Después, en Actions, pulsa **Re-run jobs**.
-
----
+Para ver las catorce comprobaciones: entra a la ejecución → etapa *Desplegar en
+la máquina virtual* → paso **Verificar la solución desplegada**. **Esa pantalla
+es una buena captura para el anexo B del informe.**
 
 ## Paso 12 — Dar acceso al profesor
 

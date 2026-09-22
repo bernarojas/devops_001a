@@ -2,9 +2,11 @@
 # =============================================================================
 #  REGISTRO DE CONTENEDORES (Azure Container Registry)
 #
-#  Crea el registro privado donde se centralizan las imágenes de la solución y
-#  deja por pantalla los tres valores que hay que cargar como secretos del
-#  repositorio de GitHub.
+#  Crea el registro privado donde se centralizan las imágenes de la solución.
+#
+#  Las canalizaciones se autentican mediante una conexión de servicio de Azure
+#  DevOps, no con estas credenciales. El usuario administrador se habilita
+#  igualmente para poder entrar a mano desde la máquina o desde una terminal.
 #
 #  QUÉ APORTA TENER UN REGISTRO, CONCRETAMENTE
 #    - Trazabilidad: la etiqueta conecta la imagen en marcha con el commit que
@@ -97,7 +99,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-#  Datos para los secretos del repositorio
+#  Credenciales para el acceso manual
 # -----------------------------------------------------------------------------
 SERVIDOR=$(az acr show --name "$REGISTRO_NOMBRE" --query loginServer --output tsv)
 USUARIO=$(az acr credential show --name "$REGISTRO_NOMBRE" --query username --output tsv)
@@ -106,8 +108,8 @@ CLAVE=$(az acr credential show --name "$REGISTRO_NOMBRE" --query 'passwords[0].v
 titulo "Registro listo"
 echo "  Servidor : $SERVIDOR"
 echo ""
-echo "  Cargue estos tres valores como secretos del repositorio, en"
-echo "  GitHub -> Settings -> Secrets and variables -> Actions:"
+echo "  Estos valores permiten autenticarse a mano contra el registro."
+echo "  Las canalizaciones NO los necesitan: usan una conexion de servicio."
 echo ""
 echo "    REGISTRO_SERVIDOR = $SERVIDOR"
 echo "    REGISTRO_USUARIO  = $USUARIO"

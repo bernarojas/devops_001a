@@ -1,0 +1,220 @@
+# =============================================================================
+#  ENTREGA Y DESPLIEGUE CONTINUOS
+#
+#  Se dispara al integrar en la rama principal. Recorre el camino completo:
+#  pruebas -> imágenes publicadas en el registro -> despliegue en la máquina
+#  virtual -> verificación.
+#
+#  DOS DECISIONES QUE VALE LA PENA LEER ANTES DEL CÓDIGO
+#
+#  1. Las imágenes se construyen UNA sola vez, acá, en el agente alojado por
+#     Microsoft, y viajan a la máquina virtual a través del registro. La
+#     máquina no compila: no tiene el SDK, ni el código fuente, ni las
+#     dependencias de compilación. Construir en el destino rompería la garantía
+#     central de la integración continua, porque lo que se ejecutaría sería el
+#     resultado de una compilación distinta de la que superó las pruebas.
+#
+#  2. El despliegue se ejecuta sobre un RECURSO DE MÁQUINA VIRTUAL registrado
+#     en un entorno de Azure Pipelines. El agente instalado en la máquina se
+#     conecta DE SALIDA hacia Azure DevOps, de modo que no hace falta abrir
+#     ningún puerto de administración hacia Internet ni autorizar rangos de
+#     direcciones en el grupo de seguridad de red.
+#
+#  El código vive en GitHub. Esta canalización lo obtiene desde allí mediante
+#  la conexión de servicio y lo ejecuta en agentes de Azure DevOps.
+# =============================================================================
+
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+variables:
+  NUGET_PACKAGES: $(Pipeline.Workspace)/.nuget/packages
+
+  # Nombre de la conexión de servicio de tipo Azure Container Registry, creada
+  # en Configuración del proyecto -> Conexiones de servicio.
+  conexionRegistro: 'acrventas-conexion'
+
+  # Servidor de inicio de sesión del registro. No es un secreto: identifica el
+  # destino, no autoriza a nada.
+  registroServidor: 'acrventas.azurecr.io'
+
+  # La contraseña del motor de base de datos llega de una variable SECRETA de
+  # la canalización, definida en la interfaz y nunca escrita en este archivo.
+  # Ver docs/AZURE-PIPELINES.md.
+
+stages:
+
+  # ---------------------------------------------------------------------------
+  #  1. Pruebas
+  # ---------------------------------------------------------------------------
+  #  La misma plantilla que ejecuta la integración continua. Si falla, no se
+  #  construye ni se publica nada.
+  - stage: Compilar
+    displayName: 'Compilación y pruebas'
+    jobs:
+      - job: CompilarYProbar
+        displayName: 'Compilar y probar'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - template: pipelines/plantilla-compilar-y-probar.yml
+
+  # ---------------------------------------------------------------------------
+  #  2. Publicación de las imágenes en el registro
+  # ---------------------------------------------------------------------------
+  - stage: Publicar
+    displayName: 'Publicar las imágenes en el registro'
+    dependsOn: Compilar
+    jobs:
+      - job: PublicarImagenes
+        displayName: 'Construir y publicar'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          # Dos etiquetas por imagen, y responden a usos distintos:
+          #
+          #   - el NÚMERO DE COMPILACIÓN identifica una versión exacta y es la
+          #     que usa el despliegue. Conecta la imagen en marcha con el commit
+          #     que la originó y con la ejecución que la construyó y la probó.
+          #   - "latest" apunta siempre a la última y existe para consultas
+          #     manuales. Desplegar con ella sería cómodo y equivocado: dos
+          #     máquinas que la descargaran en momentos distintos podrían
+          #     terminar ejecutando versiones distintas, y no habría forma de
+          #     saberlo.
+          - task: Docker@2
+            displayName: 'Construir y publicar la imagen de la aplicación'
+            inputs:
+              command: buildAndPush
+              containerRegistry: '$(conexionRegistro)'
+              repository: 'ventas-web'
+              dockerfile: 'src/PruebaTecnica.Web/Dockerfile'
+              buildContext: '$(Build.SourcesDirectory)'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Construir y publicar la imagen del proxy'
+            inputs:
+              command: buildAndPush
+              containerRegistry: '$(conexionRegistro)'
+              repository: 'ventas-proxy'
+              dockerfile: 'docker/proxy/Dockerfile'
+              buildContext: '$(Build.SourcesDirectory)'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - script: |
+              echo "Imágenes publicadas con la etiqueta $(Build.BuildId):"
+              echo "  $(registroServidor)/ventas-web:$(Build.BuildId)"
+              echo "  $(registroServidor)/ventas-proxy:$(Build.BuildId)"
+              echo "Commit: $(Build.SourceVersion)"
+            displayName: 'Resumen de lo publicado'
+
+  # ---------------------------------------------------------------------------
+  #  3. Despliegue en la máquina virtual
+  # ---------------------------------------------------------------------------
+  - stage: Desplegar
+    displayName: 'Desplegar en la máquina virtual'
+    dependsOn: Publicar
+    jobs:
+      - deployment: DesplegarEnVM
+        displayName: 'Desplegar y verificar'
+
+        # El entorno y su recurso de máquina virtual se crean en Azure DevOps,
+        # en Pipelines -> Entornos. Al registrar el recurso, Azure entrega un
+        # comando que instala el agente dentro de la máquina.
+        environment:
+          name: 'produccion'
+          resourceType: VirtualMachine
+          resourceName: 'vm-web-01'
+
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                # En un trabajo de despliegue el código NO se descarga solo:
+                # hay que pedirlo explícitamente. Sólo viajan a la máquina el
+                # archivo de orquestación, los scripts SQL y los de despliegue;
+                # lo que se ejecuta viene íntegramente de las imágenes.
+                - checkout: self
+
+                - script: |
+                    # umask 077 ANTES de crear el archivo: así nace con
+                    # permisos 600 y la contraseña nunca llega a existir en
+                    # disco siendo legible por otros usuarios de la máquina,
+                    # ni siquiera por un instante.
+                    umask 077
+                    {
+                      echo "REGISTRO=$(registroServidor)"
+                      echo "ETIQUETA=$(Build.BuildId)"
+                      echo "MSSQL_SA_PASSWORD=$(MSSQL_SA_PASSWORD)"
+                    } > .env
+                    echo "Archivo .env escrito con permisos $(stat -c '%a' .env)."
+                  displayName: 'Escribir las variables del despliegue'
+                  workingDirectory: '$(Pipeline.Workspace)/s'
+
+                - task: Docker@2
+                  displayName: 'Autenticarse en el registro de contenedores'
+                  inputs:
+                    command: login
+                    containerRegistry: '$(conexionRegistro)'
+
+                # Descargar antes de recrear acorta la ventana de
+                # indisponibilidad: si la descarga falla, la versión anterior
+                # sigue en marcha y no se tocó nada.
+                - script: docker compose -f docker-compose.prod.yml pull
+                  displayName: 'Descargar las imágenes'
+                  workingDirectory: '$(Pipeline.Workspace)/s'
+
+                - script: |
+                    docker compose -f docker-compose.prod.yml up -d --remove-orphans
+                    docker compose -f docker-compose.prod.yml ps -a
+                  displayName: 'Levantar la solución'
+                  workingDirectory: '$(Pipeline.Workspace)/s'
+
+                # La misma verificación que se ejecuta a mano, ejecutada en
+                # cada publicación. Devuelve un código distinto de cero si
+                # alguna comprobación falla, y eso marca el despliegue como
+                # fallido en lugar de darlo por bueno porque los contenedores
+                # "arrancaron".
+                #
+                # set -o pipefail NO es decorativo. Sin él, el código de salida
+                # de la tubería sería el de `tee`, que siempre termina bien, y
+                # un despliegue roto saldría en verde. Ocurrió de verdad en
+                # este proyecto.
+                - script: |
+                    set -o pipefail
+                    bash scripts/despliegue/verificar-stack.sh | tee verificacion.txt
+                  displayName: 'Verificar la solución desplegada'
+                  workingDirectory: '$(Pipeline.Workspace)/s'
+
+                - task: PublishPipelineArtifact@1
+                  displayName: 'Adjuntar el resultado de la verificación'
+                  condition: always()
+                  inputs:
+                    targetPath: '$(Pipeline.Workspace)/s/verificacion.txt'
+                    artifact: 'verificacion-$(Build.BuildId)'
+
+                # Las imágenes de despliegues anteriores se acumulan y el disco
+                # de la máquina no es grande. Se limpia lo que ya no usa ningún
+                # contenedor, conservando lo de las últimas 48 horas por si
+                # hiciera falta volver atrás sin descargar de nuevo.
+                - script: docker image prune --all --force --filter "until=48h"
+                  displayName: 'Liberar espacio de imágenes antiguas'
+                  condition: always()
+
+                # El cierre de sesión va al final y con condition: always()
+                # para que la credencial del registro no quede almacenada en la
+                # máquina aunque un paso anterior haya fallado.
+                - script: docker logout $(registroServidor)
+                  displayName: 'Cerrar la sesión del registro'
+                  condition: always()

@@ -38,22 +38,20 @@ bash "$DIRECTORIO/30-maquina-virtual.sh"
 
 titulo "Qué falta para que el despliegue funcione"
 cat <<'PENDIENTE'
-  1. Cargar los secretos del repositorio, en
-     GitHub -> Settings -> Secrets and variables -> Actions -> Secrets:
+  1. Configurar Azure DevOps, siguiendo docs/AZURE-PIPELINES.md:
 
-       REGISTRO_SERVIDOR    servidor del registro (lo imprimió 20-registro.sh)
-       REGISTRO_USUARIO     usuario administrador del registro
-       REGISTRO_CLAVE       contraseña del registro
-       MSSQL_SA_PASSWORD    contraseña del usuario sa del motor
+       Conexión de servicio a GitHub          github-devops001a
+       Conexión de servicio al registro       acrventas-conexion
+       Entorno con recurso de máquina virtual produccion / vm-web-01
+       Variable secreta                       MSSQL_SA_PASSWORD
 
-  2. Cargar la variable del repositorio, en la pestaña Variables:
+  2. Preparar la máquina con Docker y los límites del sistema:
 
-       DIRECCION_PUBLICA    la dirección que imprimió 30-maquina-virtual.sh
+       bash scripts/infraestructura/40-preparar-maquina.sh
 
-  3. Registrar el agente autoalojado dentro de la máquina:
+  3. Registrar el agente del entorno dentro de la máquina, con el comando
+     que entrega el portal al crear el recurso de máquina virtual.
 
-       bash scripts/infraestructura/40-preparar-maquina.sh \
-            --repo usuario/repositorio --token TOKEN_DE_REGISTRO
-
-  4. Integrar en la rama principal. El despliegue se dispara solo.
+  4. Crear las tres canalizaciones apuntando a los archivos del repositorio
+     y ejecutar la de entrega continua.
 PENDIENTE

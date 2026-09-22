@@ -1,0 +1,114 @@
+# =============================================================================
+#  INTEGRACIÓN CONTINUA
+#
+#  Se ejecuta en cada solicitud de incorporación de cambios y en cada empuje a
+#  una rama de trabajo. Compila, ejecuta las pruebas y construye las imágenes
+#  PERO NO PUBLICA NI DESPLIEGA NADA.
+#
+#  Esa separación es el punto: la rama principal es la línea estable, y lo que
+#  llega a ella ya pasó por acá. El valor de la integración continua no está en
+#  automatizar la compilación sino en CUÁNDO se detectan los defectos: minutos
+#  después de introducirlos, mientras quien los escribió todavía recuerda el
+#  contexto.
+#
+#  El orden tampoco es casual. Las pruebas van ANTES de construir las imágenes:
+#  una compilación defectuosa no llega siquiera a empaquetarse.
+#
+#  El código vive en GitHub; esta canalización lo obtiene desde allí mediante
+#  la conexión de servicio y lo ejecuta en un agente de Azure DevOps.
+# =============================================================================
+
+name: CI-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    exclude:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Ubicación de la caché de paquetes, que la plantilla reutiliza.
+  NUGET_PACKAGES: $(Pipeline.Workspace)/.nuget/packages
+
+stages:
+
+  # ---------------------------------------------------------------------------
+  #  Compilación y pruebas
+  # ---------------------------------------------------------------------------
+  #  Los pasos viven en una plantilla que también incluye la entrega continua,
+  #  de modo que desplegar sin haber probado sea imposible.
+  - stage: Compilar
+    displayName: 'Compilación y pruebas'
+    jobs:
+      - job: CompilarYProbar
+        displayName: 'Compilar y probar'
+        steps:
+          - template: pipelines/plantilla-compilar-y-probar.yml
+
+  # ---------------------------------------------------------------------------
+  #  Validación de las imágenes
+  # ---------------------------------------------------------------------------
+  #  Construye las dos imágenes propias sin publicarlas. Sirve para que un error
+  #  en un Dockerfile se detecte en la solicitud de cambios y no en la rama
+  #  principal, cuando ya es tarde.
+  - stage: Imagenes
+    displayName: 'Construir las imágenes (sin publicar)'
+    dependsOn: Compilar
+    jobs:
+      - job: Construir
+        displayName: 'Construir sin publicar'
+        steps:
+          - task: Docker@2
+            displayName: 'Construir la imagen de la aplicación'
+            inputs:
+              command: build
+              repository: ventas-web
+              dockerfile: src/PruebaTecnica.Web/Dockerfile
+              buildContext: '$(Build.SourcesDirectory)'
+              tags: validacion
+
+          - task: Docker@2
+            displayName: 'Construir la imagen del proxy'
+            inputs:
+              command: build
+              repository: ventas-proxy
+              dockerfile: docker/proxy/Dockerfile
+              buildContext: '$(Build.SourcesDirectory)'
+              tags: validacion
+
+  # ---------------------------------------------------------------------------
+  #  Validación de la orquestación y de los scripts
+  # ---------------------------------------------------------------------------
+  #  Un error de sintaxis o una variable mal escrita en docker-compose.prod.yml
+  #  no se manifestaría hasta el despliegue. `config` lo resuelve en segundos.
+  - stage: Orquestacion
+    displayName: 'Validar la orquestación'
+    dependsOn: []          # corre en paralelo con la compilación
+    jobs:
+      - job: Validar
+        displayName: 'Validar archivos'
+        steps:
+          # Valores de relleno: acá sólo se comprueba que el archivo sea válido
+          # y que toda variable referenciada esté declarada. No se levanta nada.
+          - script: docker compose -f docker-compose.prod.yml config --quiet
+            displayName: 'Interpretar docker-compose.prod.yml'
+            env:
+              REGISTRO: registro.ejemplo.azurecr.io
+              ETIQUETA: '0'
+              MSSQL_SA_PASSWORD: 'Relleno#Para!Validar1'
+
+          - script: |
+              sudo apt-get update
+              sudo apt-get install -y shellcheck
+              shellcheck --severity=warning \
+                scripts/despliegue/*.sh \
+                scripts/infraestructura/*.sh \
+                docker/inicializacion/*.sh
+            displayName: 'Revisar los scripts de shell'

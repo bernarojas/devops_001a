@@ -2,47 +2,28 @@
 # =============================================================================
 #  PREPARACIÓN DE LA MÁQUINA, EJECUTADA DENTRO DE ELLA
 #
-#  Instala Docker, ajusta los límites que SQL Server necesita y registra el
-#  agente de GitHub Actions.
+#  Instala Docker y ajusta los límites del sistema que SQL Server necesita.
+#  Es todo lo que la máquina requiere antes de poder recibir un despliegue.
 #
-#  Este script se ejecuta DENTRO de la máquina virtual, por SSH. Es la parte
-#  que no se puede hacer con clics en el portal: instalar software y registrar
-#  un servicio requiere una terminal en la máquina, no un formulario.
+#  NO registra el agente de la canalización. Ese paso lo cubre el propio portal
+#  de Azure DevOps: al crear el recurso de máquina virtual dentro de un entorno
+#  entrega un comando con un token de un solo uso, que se pega y se ejecuta
+#  aquí mismo. Está documentado en docs/AZURE-PIPELINES.md, paso 3.
+#
+#  Mantener esas dos cosas separadas tiene una razón: lo que este script hace
+#  es idempotente y se puede repetir sin consecuencias, mientras que registrar
+#  un agente es una operación con estado y con una credencial que caduca.
 #
 #  Hay dos formas de llegar acá:
-#    - A mano, entrando por SSH y clonando el repositorio (ver docs).
+#    - A mano, entrando por SSH y clonando el repositorio.
 #    - Desde la máquina del administrador, con 40-preparar-maquina.sh, que
 #      hace lo mismo pero se conecta solo.
 #
-#  El token de registro se obtiene en:
-#      GitHub -> Settings -> Actions -> Runners -> New self-hosted runner
-#  Caduca en una hora.
-#
 #  Uso, ya dentro de la máquina:
-#      bash scripts/infraestructura/preparar-maquina-desde-dentro.sh \
-#           --repo bernarojas/devops_001a \
-#           --token AXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#      bash scripts/infraestructura/preparar-maquina-desde-dentro.sh
 # =============================================================================
 
 set -euo pipefail
-
-REPOSITORIO=""
-TOKEN=""
-VERSION_AGENTE="${VERSION_AGENTE:-2.322.0}"
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --repo)  REPOSITORIO="$2"; shift 2 ;;
-        --token) TOKEN="$2";       shift 2 ;;
-        *) echo "Opción desconocida: $1" >&2; exit 2 ;;
-    esac
-done
-
-if [[ -z "$REPOSITORIO" || -z "$TOKEN" ]]; then
-    echo "Faltan argumentos obligatorios." >&2
-    echo "Uso: bash $0 --repo usuario/repositorio --token TOKEN_DE_REGISTRO" >&2
-    exit 2
-fi
 
 echo ""
 echo "=== 1. Paquetes base ==="
@@ -73,8 +54,9 @@ https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_C
     echo "Instalado: $(docker --version)"
 fi
 
-# El agente ejecuta como el usuario administrador, no como root. Para que
-# pueda hablar con el demonio de Docker tiene que pertenecer al grupo docker.
+# El agente de la canalización ejecuta como este usuario, no como root. Para
+# que pueda hablar con el demonio de Docker tiene que pertenecer al grupo
+# docker.
 sudo usermod -aG docker "$USER"
 
 echo ""
@@ -95,59 +77,19 @@ else
 fi
 
 echo ""
-echo "=== 4. Agente de GitHub Actions ==="
-CARPETA="$HOME/actions-runner"
-
-if [[ -f "$CARPETA/.runner" ]]; then
-    echo "Ya hay un agente registrado en $CARPETA."
-    echo "Para rehacerlo:"
-    echo "    cd $CARPETA && sudo ./svc.sh uninstall && ./config.sh remove --token TOKEN"
-else
-    mkdir -p "$CARPETA"
-    cd "$CARPETA"
-
-    if [[ ! -f "./config.sh" ]]; then
-        ARCHIVO="actions-runner-linux-x64-${VERSION_AGENTE}.tar.gz"
-        echo "Descargando el agente $VERSION_AGENTE..."
-        curl -fsSL -o "$ARCHIVO" \
-            "https://github.com/actions/runner/releases/download/v${VERSION_AGENTE}/${ARCHIVO}"
-        tar xzf "$ARCHIVO"
-        rm -f "$ARCHIVO"
-    fi
-
-    # Las tres etiquetas son las que el flujo de despliegue exige en
-    # `runs-on: [self-hosted, linux, ventas]`. "ventas" identifica a ESTA
-    # máquina: si mañana se registrara otro agente en el repositorio, el
-    # despliegue no se le iría por error.
-    #
-    # --unattended y --replace permiten volver a ejecutar el script sin que se
-    # quede esperando una respuesta ni falle porque el nombre ya existe.
-    ./config.sh \
-        --url "https://github.com/${REPOSITORIO}" \
-        --token "${TOKEN}" \
-        --name "vm-ventas" \
-        --labels "self-hosted,linux,ventas" \
-        --work "_trabajo" \
-        --unattended \
-        --replace
-
-    # Como servicio: sobrevive a un reinicio de la máquina.
-    sudo ./svc.sh install "$USER"
-    sudo ./svc.sh start
-
-    echo "Agente registrado y en ejecución."
-fi
-
-echo ""
-echo "=== 5. Comprobación final ==="
-systemctl list-units 'actions.runner.*' --no-pager --no-legend || true
+echo "=== 4. Comprobación ==="
+docker --version
+docker compose version
+echo "Memoria disponible:"
+free -h | awk 'NR<=2'
 
 echo ""
 echo "Preparación completada."
 echo ""
-echo "El agente debería aparecer como 'Idle' en:"
-echo "    https://github.com/${REPOSITORIO}/settings/actions/runners"
+echo "SIGUIENTE PASO: registrar el agente del entorno de Azure Pipelines."
+echo "El comando lo entrega el portal en Pipelines -> Entornos -> produccion,"
+echo "al agregar un recurso de tipo máquina virtual. Ver docs/AZURE-PIPELINES.md"
 echo ""
 echo "AVISO: la pertenencia al grupo docker se aplica al iniciar sesión de"
-echo "nuevo. Cierra esta sesión SSH y vuelve a entrar antes del primer"
-echo "despliegue, o reinicia la máquina desde el portal."
+echo "nuevo. Cierra esta sesión SSH y vuelve a entrar antes de registrar el"
+echo "agente, o reinicia la máquina desde el portal."

@@ -6,21 +6,20 @@
 #  allá. Es un atajo: hace lo mismo que entrar por SSH a mano, pero averigua
 #  la dirección solo, preguntándosela a Azure.
 #
-#  Requiere la CLI de Azure con sesión iniciada. Si prefieres no instalarla,
-#  entra por SSH y ejecuta el otro script directamente; está documentado en
-#  docs/PUESTA-EN-MARCHA.md.
+#  Instala Docker y los límites del sistema. El agente de la canalización se
+#  registra aparte, con el comando que entrega el portal de Azure DevOps al
+#  crear el recurso de máquina virtual dentro de un entorno; está documentado
+#  en docs/AZURE-PIPELINES.md, paso 3.
 #
 #  Toda la lógica vive en preparar-maquina-desde-dentro.sh y no acá: así hay
 #  una sola versión de los pasos, y no dos que se separan con el tiempo.
 #
-#  El token de registro se obtiene en:
-#      GitHub -> Settings -> Actions -> Runners -> New self-hosted runner
-#  Caduca en una hora.
+#  Requiere la CLI de Azure con sesión iniciada. Si prefieres no instalarla,
+#  entra por SSH y ejecuta el otro script directamente.
 #
 #  Uso:
-#      bash scripts/infraestructura/40-preparar-maquina.sh \
-#           --repo bernarojas/devops_001a \
-#           --token AXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#      bash scripts/infraestructura/40-preparar-maquina.sh
+#      bash scripts/infraestructura/40-preparar-maquina.sh --clave ~/.ssh/vm-web-01
 # =============================================================================
 
 set -euo pipefail
@@ -29,25 +28,14 @@ DIRECTORIO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/infraestructura/00-variables.sh
 source "$DIRECTORIO/00-variables.sh"
 
-REPOSITORIO=""
-TOKEN=""
 CLAVE_SSH=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --repo)  REPOSITORIO="$2"; shift 2 ;;
-        --token) TOKEN="$2";       shift 2 ;;
-        --clave) CLAVE_SSH="$2";   shift 2 ;;
+        --clave) CLAVE_SSH="$2"; shift 2 ;;
         *) error "Opción desconocida: $1"; exit 2 ;;
     esac
 done
-
-if [[ -z "$REPOSITORIO" || -z "$TOKEN" ]]; then
-    error "Faltan argumentos obligatorios."
-    error "Uso: bash $0 --repo usuario/repositorio --token TOKEN_DE_REGISTRO"
-    error "     [--clave ruta/a/la/clave.pem]"
-    exit 2
-fi
 
 titulo "Preparación de $MAQUINA"
 verificar_sesion_azure
@@ -74,14 +62,14 @@ scp "${OPCIONES_SSH[@]}" \
     "$USUARIO_ADMIN@$DIRECCION:/tmp/preparar.sh"
 
 paso "Ejecutándolo en la máquina..."
-# Las comillas simples alrededor del comando remoto evitan que el token se
-# expanda o se interprete de este lado.
-ssh "${OPCIONES_SSH[@]}" "$USUARIO_ADMIN@$DIRECCION" \
-    "bash /tmp/preparar.sh --repo '$REPOSITORIO' --token '$TOKEN'"
+ssh "${OPCIONES_SSH[@]}" "$USUARIO_ADMIN@$DIRECCION" "bash /tmp/preparar.sh"
 
 titulo "Máquina preparada"
-echo "  El agente debería aparecer como 'Idle' en:"
-echo "      https://github.com/$REPOSITORIO/settings/actions/runners"
+echo "  Siguiente paso: registrar el agente del entorno de Azure Pipelines."
+echo "  El comando lo entrega el portal en Pipelines -> Entornos -> produccion,"
+echo "  al agregar un recurso de tipo máquina virtual."
+echo ""
+echo "  Guía completa: docs/AZURE-PIPELINES.md"
 echo ""
 aviso "Si el primer despliegue falla por permisos del socket de Docker,"
 aviso "reinicie la máquina:  az vm restart -g $GRUPO_RECURSOS -n $MAQUINA"

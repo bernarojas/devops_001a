@@ -29,6 +29,16 @@
 #      bash scripts/despliegue/verificar-stack.sh
 # =============================================================================
 
+# El nombre del proyecto se fija acá en lugar de dejar que Docker Compose lo
+# derive del nombre de la carpeta.
+#
+# Importa porque el agente que despliega no siempre trabaja en el mismo
+# directorio: un agente de Azure Pipelines usa una ruta distinta a la de una
+# sesión manual por SSH. Sin este nombre fijo, cada uno consideraría los
+# contenedores como de un proyecto distinto e intentaría crearlos de nuevo,
+# chocando con los que ya existen.
+name: ventas
+
 services:
 
   # ---------------------------------------------------------------------------
