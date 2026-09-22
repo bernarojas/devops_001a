@@ -39,11 +39,12 @@ su propia región, y no toca nada de `rg-devops-001a`.
 
 ### La región
 
-La guía de la asignatura insiste en **East US 2** para todo el
-aprovisionamiento. Tu infraestructura de ventas está en West US 3, y eso no
-importa: son recursos independientes y no se comunican entre sí.
+La actividad indica **East US 2**. Antes de darla por buena hay que comprobar
+que la suscripción la admita: el desplegable de regiones del formulario de AKS
+marca como «No apto» las que no puede usar.
 
-Para el clúster usa **East US 2**.
+En la suscripción de este proyecto la única elegible resultó ser West US 3. El
+apartado del final lo detalla.
 
 ---
 
@@ -66,7 +67,7 @@ Portal → busca **Cuotas** → primera tarjeta, **Compute**.
 Dentro, filtra por:
 
 - **Suscripción:** Azure for Students
-- **Región:** `East US 2`
+- **Región:** la que vayas a usar
 
 Hay que mirar **dos** filas, y las dos tienen que alcanzar:
 
@@ -75,22 +76,12 @@ Hay que mirar **dos** filas, y las dos tienen que alcanzar:
 
 Con dos nodos de dos núcleos necesitas **4 o más** en ambas.
 
-### Lo que se midió en esta suscripción
+> El límite regional manda sobre el de cada familia: da igual que una familia
+> tenga 10 núcleos asignados si el techo de la región es 6, porque ese techo
+> cuenta todo lo que se ejecute allí.
 
-Hay que mirar **dos** cuotas, y la que manda no es la de la familia:
-
-```
-vCPU regionales totales        East US 2   0 de 6    ← el techo real
-Familia DSv3 estándar vCPUs    East US 2   0 de 4
-Familia DASv4 estándar vCPUs   East US 2   0 de 4
-Familia Bsv2 estándar vCPUs    East US 2   0 de 10
-```
-
-El límite regional de **6 vCPU** manda sobre todos los demás: da igual que una
-familia tenga 10 asignados, la suma de todo lo que se ejecute en la región no
-puede pasar de 6.
-
-Dos nodos de 2 vCPU son 4. Entra, con dos de margen.
+Lo medido en la suscripción de este proyecto está en el apartado *Por qué no
+fue posible*, al final.
 
 ### Cómo elegir el tamaño
 
@@ -141,7 +132,7 @@ Portal → **Grupos de recursos** → **+ Crear**
 |---|---|
 | Suscripción | Azure for Students |
 | Nombre | `rg-aks-devops` |
-| Región | **East US 2** |
+| Región | la región elegible (ver el diagnóstico del final) |
 
 **Revisar y crear** → **Crear**.
 
@@ -164,7 +155,7 @@ Kubernetes**
 | Grupo de recursos | `rg-aks-devops` |
 | Configuración preestablecida del clúster | `Desarrollo/pruebas` |
 | Nombre del clúster de Kubernetes | `aks-devops` |
-| Región | **East US 2** |
+| Región | la región elegible (ver el diagnóstico del final) |
 | Plan de tarifa | `Gratis` |
 
 El resto por omisión.
@@ -195,7 +186,7 @@ Aquí hay dos cosas que hacer.
 | Nombre del grupo de nodos | `nplinux` |
 | Modo | `Usuario` |
 | Sistema operativo | `Ubuntu Linux` |
-| Tamaño del nodo | `D2as_v4` |
+| Tamaño del nodo | el mismo que el otro grupo |
 | Recuento mínimo de nodos | `1` |
 | Recuento máximo de nodos | `2` |
 
