@@ -36,6 +36,10 @@ docker rm -f ventas-proxy ventas-web ventas-datos ventas-migraciones
 > forma explícita, igual que las dos redes, así que no dependen del nombre del
 > proyecto y sobreviven. El primer despliegue los vuelve a usar tal cual.
 
+> Justamente por eso, la variable `MSSQL_SA_PASSWORD` de la canalización tiene
+> que ser la **misma de antes**. Si no, la base queda inaccesible: ver el último
+> apartado de esta guía.
+
 ---
 
 ## Paso 1 — Conexión de servicio con GitHub
@@ -230,4 +234,51 @@ Runners** → menú del agente → **Remove runner**.
 | El despliegue queda esperando indefinidamente | El recurso del entorno no está en línea. Revisa el agente en la máquina. |
 | `Conflict. The container name "/ventas-proxy" is already in use` | Falta la limpieza del apartado inicial de esta guía. |
 | `permission denied` sobre el socket de Docker | El usuario del agente no está en el grupo `docker`. Reinicia la máquina desde el portal. |
+| `datos` queda en `unhealthy` y nada más arranca | La contraseña de `MSSQL_SA_PASSWORD` no coincide con la que quedó grabada en el volumen. Ver el apartado siguiente. |
 | La verificación falla en `GET /` | El proxy aún no terminó de arrancar, o el puerto 80 está ocupado por otro proceso. |
+
+---
+
+## La contraseña vive en el volumen, no en la variable
+
+Ocurrió al migrar de GitHub Actions a Azure Pipelines, y cuesta un rato
+entenderlo la primera vez.
+
+SQL Server sólo lee `MSSQL_SA_PASSWORD` **cuando inicializa una base de datos
+vacía**. A partir de ahí la contraseña queda guardada dentro del volumen y la
+variable se ignora por completo. Si la canalización nueva trae otra, el motor
+arranca igual —el proceso no tiene nada de malo— pero su sonda de salud inicia
+sesión como `sa` y esa sesión falla:
+
+```
+Login failed for user 'sa'. Reason: Password did not match that for the login provided.
+```
+
+Como `datos` nunca pasa a *healthy*, la cadena de dependencias se detiene ahí:
+`migraciones` no corre, y sin migraciones no arrancan `web` ni `proxy`. La
+verificación termina con cinco comprobaciones en rojo —el puerto publicado y
+las cuatro respuestas HTTP— que son consecuencia y no causa. Las de
+segmentación de redes y las de cuotas de memoria siguen en verde, y eso mismo
+es la pista: si la orquestación estuviera mal declarada, habrían caído también.
+
+Se diagnostica en la máquina:
+
+```bash
+docker inspect --format '{{json .State.Health}}' ventas-datos | tail -c 600
+docker logs --tail 20 ventas-datos
+```
+
+Y se resuelve de dos maneras. O se recupera la contraseña original —el `.env`
+del despliegue anterior la conserva— y se corrige la variable secreta, o se
+descarta el volumen para que la base se reconstruya:
+
+```bash
+docker rm -f ventas-datos ventas-migraciones ventas-web ventas-proxy
+docker volume rm ventas-datos-volumen
+```
+
+Lo segundo no pierde nada. Los ocho productos, las 2.008 ventas y las ocho
+anomalías los genera `sql/00_base_y_datos_sinteticos.sql` sin una sola llamada
+a `RAND()`, de modo que la base resultante es idéntica registro por registro.
+Es, de paso, la demostración práctica de que el ambiente se reconstruye desde
+el repositorio.
